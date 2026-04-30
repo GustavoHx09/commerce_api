@@ -5,7 +5,8 @@ export const createUserRepo = (data) => {
 };
 
 export const getUsersRepo = () => {
-    return users.find();
+    // busca os dados organizando pelo mais recente
+    return users.find().sort({ createdAt: -1 }).lean();
 };
 
 export const getUserByIdRepo = (id) => {

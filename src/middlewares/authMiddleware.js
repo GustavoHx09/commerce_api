@@ -30,7 +30,19 @@ export const authMiddleware = (req, res, next) => {
   }
 };
 
+// valida se o usuario é admin
 export const isAdmin = (req, res, next) => {
+
+  if (req.user.profile !== "admin") {
+    return res.status(403).json({
+      message: "Acesso negado"
+    });
+  }
+  next();
+}
+
+// valida se o usuario é funcionario
+export const isManager = (req, res, next) => {
 
   if (req.user.profile !== "admin") {
     return res.status(403).json({

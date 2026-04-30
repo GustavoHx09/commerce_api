@@ -7,6 +7,7 @@ import {
     deleteUserRepo
 } from "../repositories/userRepo.js";
 import users from "../models/usersModel.js";
+import { userResponse } from "../formatters/userFormatter.js";
 
 export const createUserService = async (data) => {
 
@@ -38,8 +39,10 @@ export const createUserService = async (data) => {
 };
 
 export const getUsersService = async () => {
-    // regra de negócio
-    return await getUsersRepo();
+    const users = await getUsersRepo();
+    
+    // exibe os dados de forma organizada
+    return users.map(userResponse);
 };
 
 export const getUserByIdService = async (id) => {
@@ -65,7 +68,7 @@ export const updateUserService = async (id, data) => {
     }
     if (data.password && data.password.length >= 6) {
         const isMatch = await bcrypt.compare(data.password, user.password);
-        
+
         if (isMatch) {
             // mesma senha -> não atualiza
             delete data.password;
