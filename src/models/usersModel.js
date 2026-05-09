@@ -10,7 +10,6 @@ const usersSchema = new mongoose.Schema({
     phone: {
         type: String,
         trim: true,
-        required: false,
         match: [/^\d{10,11}$/, 'Telefone inválido']
     },
 
@@ -19,7 +18,7 @@ const usersSchema = new mongoose.Schema({
         unique: true,
         required: true,
         trim: true,
-        match: [/^\d{11}$/, 'CPF deve conter 11 números']
+        // match: [/^\d{11}$/, 'CPF deve conter 11 números']
     },
 
     address: {

@@ -17,18 +17,10 @@ export const createUser = async (req, res) => {
             message: "Usuário criado com sucesso",
             user
         });
-
     } catch (error) {
-        // tratamento para email duplicado
-        if (error.code === 11000) {
-            return res.status(400).json({
-                message: "Email já cadastrado, por favor insira outro!"
-            });
-        } else {
-            return res.status(error.statusCode || 500).json({
-                message: error.message || "Erro ao criar usuário"
-            });
-        }
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Erro ao criar usuário"
+        });
     }
 };
 
@@ -41,7 +33,7 @@ export const updateUser = async (req, res) => {
         const user = await updateUserService(
             id,
             data,
-            { new: true }
+            req.user
         );
 
         return res.status(200).json({
@@ -50,21 +42,6 @@ export const updateUser = async (req, res) => {
         });
 
     } catch (error) {
-
-        // email duplicado
-        if (error.code === 11000) {
-            return res.status(400).json({
-                message: "Email já cadastrado, por favor insira outro!"
-            });
-        }
-
-        // erro vindo do service (throw com statusCode)
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({
-                message: error.message
-            });
-        }
-
         // erro genérico
         return res.status(500).json({
             message: "Erro ao atualizar usuário",
@@ -79,11 +56,6 @@ export const deleteUser = async (req, res) => {
         const id = req.params.id;
 
         await deleteUserService(id);
-
-        return res.status(200).json({
-            message: "Usuário deletado com sucesso"
-        });
-
     } catch (error) {
         return res.status(500).json({
             message: "Erro ao deletar usuário",
@@ -95,13 +67,12 @@ export const deleteUser = async (req, res) => {
 // Buscar todos
 export const getUsers = async (req, res) => {
     try {
-        const user = await getUsersService();
+        const users = await getUsersService(req.query);
 
         return res.status(200).json({
             message: "Usuários listado com sucesso",
-            user
+            users
         });
-
     } catch (error) {
         return res.status(500).json({
             message: "Erro ao listar usuários",

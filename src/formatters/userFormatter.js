@@ -3,11 +3,10 @@ export function userResponse(user) {
     _id: user._id,
     name: user.name,
     email: user.email,
-    cpf: user.cpf,
     phone: user.phone,
+    cpf: user.cpf,
     profile: user.profile,
     address: user.address,
-    status: user.status,
-    createdAt: user.createdAt
+    status: user.status
   };
 }
