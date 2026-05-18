@@ -6,15 +6,15 @@ import {
   updateUser,
   deleteUser
 } from '../controllers/userController.js';
-import { isAdmin } from '../middlewares/authMiddleware.js';
+import { permissions } from '../middlewares/authMiddleware.js';
 
 const router = Router();
 
 // aqui implementar as rotas baseadas no controller
 router.get('/', getUsers);
 router.get('/:id', getUserById);
-router.post('/', isAdmin, createUser);
-router.put('/:id', isAdmin, updateUser);
-router.delete('/:id', isAdmin, deleteUser);
+router.post('/', permissions, createUser);
+router.put('/:id', permissions, updateUser);
+router.delete('/:id', permissions, deleteUser);
 
 export default router;

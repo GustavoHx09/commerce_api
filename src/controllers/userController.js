@@ -11,7 +11,10 @@ export const createUser = async (req, res) => {
     try {
         const data = req.body;
 
-        const user = await createUserService(data);
+        const user = await createUserService(
+            data,
+            req.user
+        );
 
         return res.status(201).json({
             message: "Usuário criado com sucesso",
@@ -29,11 +32,12 @@ export const updateUser = async (req, res) => {
     try {
         const id = req.params.id;
         const data = req.body;
+        const currentUser = req.user;
 
         const user = await updateUserService(
             id,
             data,
-            req.user
+            currentUser
         );
 
         return res.status(200).json({
@@ -54,8 +58,18 @@ export const updateUser = async (req, res) => {
 export const deleteUser = async (req, res) => {
     try {
         const id = req.params.id;
+        const currentUser = req.user;
 
-        await deleteUserService(id);
+        const user = await deleteUserService(
+            id,
+            currentUser
+        );
+
+        return res.status(200).json({
+            message: "Usuário deletado com sucesso",
+            user
+        });
+
     } catch (error) {
         return res.status(500).json({
             message: "Erro ao deletar usuário",

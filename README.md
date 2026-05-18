@@ -22,12 +22,15 @@ Esta é minha API em desenvolvimento utilizando Node.js + Express + MongoDB.
 - Senhas criptografadas com bcrypt
 - Autenticação via JWT
 - CORS configurado
+- RBAC (Role-Based Access Control)
+- Hierarquia de permissões
 
 ---
 
 ## 📦 Estrutura
 
 - controllers → lógica de rota
+- middlewares → controlador de permissões
 - services → regras de negócio
 - repositories → acesso ao banco
 - routes → endpoints

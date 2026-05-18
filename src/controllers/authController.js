@@ -7,7 +7,9 @@ export const login = async (req, res) => {
     const { email, password } = req.body;
 
     // busca o usuário no banco pelo email
-    const user = await users.findOne({ email });
+    const user = await users
+      .findOne({ email })
+      .select("+password");
 
     if (!user) {
       return res.status(401).json({ message: "Credenciais inválidas" });
@@ -26,7 +28,8 @@ export const login = async (req, res) => {
       {
         id: user._id,
         email: user.email,
-        profile: user.profile
+        profile: user.profile,
+        companyId: user.company
       },
       process.env.JWT_SECRET,
       process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : undefined

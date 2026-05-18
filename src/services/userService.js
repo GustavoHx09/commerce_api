@@ -13,7 +13,11 @@ import { cpfExists } from "../validators/cpfExist.js";
 import { isValidCPF } from "../utils/cpfIsValid.js";
 import { isEmpty } from "../validators/isEmpty.js";
 
-export const createUserService = async (data) => {
+
+/* /////////////////////////
+    Cria o usuario
+///////////////////////// */
+export const createUserService = async (data, currentUser) => {
 
     // validação do nome
     if (isEmpty(data.name)) {
@@ -102,7 +106,7 @@ export const createUserService = async (data) => {
     if (data.password && data.password.length >= 6) {
         const hashedPassword = await bcrypt.hash(data.password, 10);
 
-        data.pass = hashedPassword;
+        data.password = hashedPassword;
     } else {
         throw {
             statusCode: 400,
@@ -110,10 +114,26 @@ export const createUserService = async (data) => {
         }
     }
 
+    if (isEmpty(data.profile)) {
+        delete data.profile;
+    } else if (data.profile === "adminmaster" && currentUser.profile !== "adminmaster") {
+        throw {
+            statusCode: 403,
+            message: "Você não tem permissão para isso!"
+        };
+    } else if (data.profile === "admin" && currentUser.profile !== "admin" && currentUser.profile !== "adminmaster") {
+        throw {
+            statusCode: 403,
+            message: "Você não tem permissão para isso."
+        };
+    }
+
     return await createUserRepo(data);
 };
 
-
+/* /////////////////////////
+    Busca os usuários 
+///////////////////////// */
 export const getUsersService = async (query) => {
     const filter = {};
 
@@ -139,10 +159,15 @@ export const getUserByIdService = async (id) => {
 };
 
 
+/* /////////////////////////
+    Atualiza o usuario 
+///////////////////////// */
 export const updateUserService = async (id, data, currentUser) => {
 
     // busca o usuário a ser editado
-    const user = await users.findById(id);
+    const user = await users
+        .findById(id)
+        .select("+password");
 
     // validação do nome
     if (isEmpty(data.name)) {
@@ -223,6 +248,8 @@ export const updateUserService = async (id, data, currentUser) => {
     // validação do email
     if (isEmpty(data.email)) {
         delete data.email;
+    } else if (data.email === user.email) {
+        delete data.email;
     } else if (data.email) {
         // confere se ja existe o mesmo email cadastrado
         await emailExists(data.email);
@@ -230,6 +257,7 @@ export const updateUserService = async (id, data, currentUser) => {
 
     // validação do campo password
     if (data.password && data.password.length >= 6) {
+
         const isMatch = await bcrypt.compare(data.password, user.password);
 
         if (isMatch) {
@@ -252,7 +280,12 @@ export const updateUserService = async (id, data, currentUser) => {
         delete data.profile;
     } else if (data.profile === user.profile) {
         delete data.profile;
-    } else if (data.profile !== undefined && currentUser.profile !== "admin") {
+    } else if (data.profile === "adminmaster" && currentUser.profile !== "adminmaster") {
+        throw {
+            statusCode: 403,
+            message: "Você não tem essa permissão!"
+        };
+    } else if (data.profile !== undefined && currentUser.profile !== "admin" && currentUser.profile !== "adminmaster") {
         throw {
             statusCode: 403,
             message: "Você não tem permissão para alterar o perfil do usuário"
@@ -281,10 +314,20 @@ export const updateUserService = async (id, data, currentUser) => {
 };
 
 
-export const deleteUserService = async (id) => {
-    const deletedUser = await users.findById(id);
+export const deleteUserService = async (id, currentUser) => {
+    const user = await users.findById(id);
 
-    if (deletedUser) {
+    if (user.profile === "adminmaster" && currentUser.profile !== "adminmaster") {
+        throw {
+            statusCode: 403,
+            message: "Você não tem permissão para excluir este usuário"
+        }
+    } else if (user.profile === "admin" && currentUser.profile !== "admin" && currentUser.profile !== "adminmaster") {
+        throw {
+            statusCode: 403,
+            message: "Você não tem permissão para excluir este usuário"
+        }
+    } else if (user) {
         return await deleteUserRepo(id);
     } else {
         throw {
@@ -292,5 +335,5 @@ export const deleteUserService = async (id) => {
             message: "O usuário não existe ou já foi deletado!"
         }
     }
- 
+
 };

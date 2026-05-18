@@ -1,9 +1,14 @@
 import mongoose from "mongoose";
 
-const usersSchema = new mongoose.Schema({
-    name: {
+const companySchema = new mongoose.Schema({
+    corporateName: {
         type: String,
         required: true,
+        trim: true
+    },
+
+    fantasyName: {
+        type: String,
         trim: true
     },
 
@@ -13,12 +18,11 @@ const usersSchema = new mongoose.Schema({
         match: [/^\d{10,11}$/, 'Telefone inválido']
     },
 
-    cpf: {
+    cnpj: {
         type: String,
         unique: true,
         required: true,
-        trim: true,
-        // match: [/^\d{11}$/, 'CPF deve conter 11 números']
+        trim: true
     },
 
     address: {
@@ -41,25 +45,6 @@ const usersSchema = new mongoose.Schema({
         match: /\S+@\S+\.\S+/
     },
 
-    password: {
-        type: String,
-        required: true,
-        minlength: 6,
-        select: false
-    },
-
-    profile: {
-        type: String,
-        enum: ['adminmaster', 'admin', 'user', 'client'],
-        default: 'client'
-    },
-
-    company: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Company",
-        required: true
-    },
-
     status: {
         type: Boolean,
         default: true
@@ -70,4 +55,4 @@ const usersSchema = new mongoose.Schema({
     timestamps: true
 });
 // cria coleção de usuarios no banco de dados
-export default mongoose.model('User', usersSchema);
+export default mongoose.model('Company', companySchema);
