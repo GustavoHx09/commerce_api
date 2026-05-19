@@ -7,15 +7,18 @@ import {
     updateUserRepo,
     deleteUserRepo
 } from "../repositories/userRepo.js";
+import { isEmpty, isValid } from "../validators/validateFields.js";
 import { userResponse } from "../formatters/userFormatter.js";
 import { emailExists } from "../validators/emailExist.js";
 import { cpfExists } from "../validators/cpfExist.js";
 import { isValidCPF } from "../utils/cpfIsValid.js";
-import { isEmpty } from "../validators/isEmpty.js";
+import { isValidPhone } from "../validators/phoneIsValid.js";
 
 
 /* /////////////////////////
+
     Cria o usuario
+
 ///////////////////////// */
 export const createUserService = async (data, currentUser) => {
 
@@ -94,6 +97,16 @@ export const createUserService = async (data, currentUser) => {
         };
     }
 
+    // validação do telefone
+    if (isEmpty(data.phone)) {
+        data.phone = null;
+    } else if (!isValidPhone(data.phone)) {
+        throw {
+            statusCode: 400,
+            message: "Telefone inválido"
+        };
+    }
+
     // validação do email
     if (isEmpty(data.email)) {
         data.email = null;
@@ -131,8 +144,11 @@ export const createUserService = async (data, currentUser) => {
     return await createUserRepo(data);
 };
 
+
 /* /////////////////////////
+
     Busca os usuários 
+
 ///////////////////////// */
 export const getUsersService = async (query) => {
     const filter = {};
@@ -154,13 +170,20 @@ export const getUsersService = async (query) => {
 };
 
 
+/* /////////////////////////
+
+   Busca o usuário pelo ID 
+
+///////////////////////// */
 export const getUserByIdService = async (id) => {
     return await getUserByIdRepo(id);
 };
 
 
 /* /////////////////////////
+
     Atualiza o usuario 
+
 ///////////////////////// */
 export const updateUserService = async (id, data, currentUser) => {
 
@@ -169,15 +192,23 @@ export const updateUserService = async (id, data, currentUser) => {
         .findById(id)
         .select("+password");
 
-    // validação do nome
-    if (isEmpty(data.name)) {
-        delete data.name;
-    } else if (data.name === user.name) {
+    // valida nome
+    if (isValid(data.name, user.name)) {
         delete data.name;
     }
 
-    // validação do cpf
-    if (isEmpty(data.cpf) || data.cpf === user.cpf) {
+    // valida telefone
+    if (isValid(data.phone, user.phone)) {
+        delete data.phone;
+    } else if (!isValidPhone(data.phone)) {
+        throw {
+            statusCode: 400,
+            message: "Telefone inválido"
+        };
+    }
+
+    // valida cpf
+    if (isValid(data.cpf, user.cpf)) {
         delete data.cpf;
     } else if (!isValidCPF(data.cpf)) {
         throw {
@@ -185,45 +216,35 @@ export const updateUserService = async (id, data, currentUser) => {
             message: "Campo 'cpf' DEVE ser válido!"
         }
     } else {
-        // confere se ja existe o mesmo cpf cadastrado
+        // faz verificação do cpf
         await cpfExists(data.cpf);
     }
 
-    // validação do endereço
+    // valida endereço
     if (data.address) {
 
-        // street
-        if (isEmpty(data.address.street)) {
+        // rua
+        if (isValid(data.address.street, user.address?.street)) {
             delete data.address.street;
-        } else if (data.address.street === user.address?.street) {
-            delete data.address.street;
-        }
+        } 
 
-        // number
-        if (isEmpty(data.address.number)) {
-            delete data.address.number;
-        } else if (data.address.number === user.address?.number) {
+        // numero
+        if (isValid(data.address.number, user.address?.number)) {
             delete data.address.number;
         }
 
-        // city (obrigatório)
-        if (isEmpty(data.address.city)) {
+        // cidade (obrigatório)
+        if (isValid(data.address.city, user.address?.city)) {
             delete data.address.city;
-        } else if (data.address.city === user.address?.city) {
-            delete data.address.city;
-        }
+        } 
 
-        // state (obrigatório)
-        if (isEmpty(data.address.state)) {
-            delete data.address.state;
-        } else if (data.address.state === user.address?.state) {
+        // estado (obrigatório)
+        if (isValid(data.address.state, user.address?.state)) {
             delete data.address.state;
         }
 
-        // zipCode
-        if (isEmpty(data.address.zipCode)) {
-            delete data.address.zipCode;
-        } else if (data.address.zipCode === user.address?.zipCode) {
+        // cep
+        if (isValid(data.address.zipCode, user.address?.zipCode)) {
             delete data.address.zipCode;
         } else if (!/^[0-9]{5}-?[0-9]{3}$/.test(data.address.zipCode)) {
             throw {
@@ -232,30 +253,26 @@ export const updateUserService = async (id, data, currentUser) => {
             };
         }
 
-        // complement
-        if (isEmpty(data.address.complement)) {
-            delete data.address.complement;
-        } else if (data.address.complement === user.address?.complement) {
+        // complemento
+        if (isValid(data.address.complement, user.address?.complement)) {
             delete data.address.complement;
         }
 
-        // se sobrar vazio, remove o address inteiro
+        // se n tiver nada, remove o address inteiro
         if (Object.keys(data.address).length === 0) {
             delete data.address;
         }
     }
 
-    // validação do email
-    if (isEmpty(data.email)) {
-        delete data.email;
-    } else if (data.email === user.email) {
+    // valida email
+    if (isValid(data.email, user.email)) {
         delete data.email;
     } else if (data.email) {
         // confere se ja existe o mesmo email cadastrado
         await emailExists(data.email);
     }
 
-    // validação do campo password
+    // valida senha
     if (data.password && data.password.length >= 6) {
 
         const isMatch = await bcrypt.compare(data.password, user.password);
@@ -276,9 +293,8 @@ export const updateUserService = async (id, data, currentUser) => {
         }
     }
 
-    if (isEmpty(data.profile)) {
-        delete data.profile;
-    } else if (data.profile === user.profile) {
+    // valida perfil
+    if (isValid(data.profile, user.profile)) {
         delete data.profile;
     } else if (data.profile === "adminmaster" && currentUser.profile !== "adminmaster") {
         throw {
@@ -292,15 +308,33 @@ export const updateUserService = async (id, data, currentUser) => {
         };
     }
 
-    if (isEmpty(data.status)) {
+    // valida empresa
+    if (isValid(data.company, user.company)) {
+        delete data.company;
+    } else if (data.company) {
+        if (data.company !== undefined && currentUser.profile !== "adminmaster") {
+            throw {
+                statusCode: 403,
+                message: "Você não tem permissão para alterar a empresa dos usuários"
+            };
+        }
+    }
+
+    // valida status
+    if (isValid(data.status, user.status)) {
         delete data.status;
-    } else if (data.status === user.status) {
-        delete data.status;
-    } else if (data.status !== undefined && currentUser.profile !== "admin") {
-        throw {
-            statusCode: 403,
-            message: "Você não tem permissão para alterar o status do usuário"
-        };
+    } else if (data.status) {
+        if (user.profile === "adminmaster" && currentUser.profile !== "adminmaster") {
+            throw {
+                statusCode: 403,
+                message: "Você não tem permissão para alterar o status deste usuário"
+            };
+        } else if (data.status !== undefined && currentUser.profile !== "admin" && currentUser.profile !== "adminmaster") {
+            throw {
+                statusCode: 403,
+                message: "Você não tem permissão para alterar o status do usuário"
+            };
+        }
     }
 
     if (Object.keys(data).length === 0) {
@@ -314,6 +348,11 @@ export const updateUserService = async (id, data, currentUser) => {
 };
 
 
+/* /////////////////////////
+
+    Deleta o usuario 
+
+///////////////////////// */
 export const deleteUserService = async (id, currentUser) => {
     const user = await users.findById(id);
 

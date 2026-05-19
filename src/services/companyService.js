@@ -11,7 +11,7 @@ import { userResponse } from "../formatters/userFormatter.js";
 import { emailExists } from "../validators/emailExist.js";
 import { cnpjExists } from "../validators/cnpjExist.js";
 import { isValidCNPJ } from "../utils/cnpjIsValid.js";
-import { isEmpty } from "../validators/isEmpty.js";
+import { isEmpty, isValid } from "../validators/validateFields.js";
 
 export const createCompanyService = async (data) => {
 
