@@ -9,6 +9,7 @@ import {
 } from "../repositories/tenantsRepo.js";
 import { isEmpty, isValid, generateSlug } from "../utils/fieldsValidations.js";
 
+// Valida os dados mínimos para criação de um tenant.
 const validateTenantData = (data) => {
     if (isEmpty(data.name)) {
         const error = new Error("AVISO: O nome é obrigatório");
@@ -17,6 +18,7 @@ const validateTenantData = (data) => {
     }
 };
 
+// Gera um slug único a partir do nome, adicionando um sufixo numérico caso já exista.
 const generateUniqueSlug = async (baseSlug, currentId = null) => {
     let slug = baseSlug;
     let counter = 1;
@@ -32,6 +34,7 @@ const generateUniqueSlug = async (baseSlug, currentId = null) => {
     }
 };
 
+// Cria um tenant gerando automaticamente o slug a partir do nome.
 export const createTenantService = async (data) => {
     validateTenantData(data);
 
@@ -41,6 +44,7 @@ export const createTenantService = async (data) => {
     return await createTenantRepo(data);
 };
 
+// Retorna a lista paginada de tenants com filtros opcionais.
 export const getTenantsService = async (query = {}) => {
     const { getPagination, getSort, paginatedResponse } = await import("../utils/paginationHelpers.js");
     const { page, limit, skip } = getPagination(query);
@@ -68,6 +72,7 @@ export const getTenantsService = async (query = {}) => {
     return paginatedResponse(tenants, page, limit, total);
 };
 
+// Busca um tenant pelo ID.
 export const getTenantByIdService = async (id) => {
     const tenant = await getTenantByIdRepo(id);
 
@@ -80,6 +85,7 @@ export const getTenantByIdService = async (id) => {
     return tenant;
 };
 
+// Atualiza um tenant, regenerando o slug automaticamente se o nome for alterado.
 export const updateTenantService = async (id, data) => {
     const tenant = await getTenantByIdRepo(id);
 
@@ -114,6 +120,7 @@ export const updateTenantService = async (id, data) => {
     return await updateTenantRepo(id, data);
 };
 
+// Remove permanentemente um tenant do banco de dados.
 export const deleteTenantService = async (id) => {
     const tenant = await getTenantByIdRepo(id);
 

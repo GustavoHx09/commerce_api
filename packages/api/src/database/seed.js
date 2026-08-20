@@ -1,31 +1,37 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import bcrypt from "bcrypt";
 import users from "../models/usersModel.js";
 import tenants from "../models/tenantsModel.js";
 import products from "../models/productsModel.js";
-import bcrypt from "bcrypt";
 
+// Carrega as variáveis de ambiente antes de conectar ao banco.
 dotenv.config();
 
+// Popula o banco com dados iniciais para desenvolvimento e testes.
 async function seed() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("Conectado ao banco");
 
+    // Limpa as coleções antes de inserir os dados iniciais.
     await users.deleteMany();
     await tenants.deleteMany();
     await products.deleteMany();
 
+    // Cria o tenant de exemplo.
     const tenant = await tenants.create({
       name: "Loja Exemplo",
       slug: "loja-exemplo",
       isActive: true,
     });
 
+    // Senhas padrão que podem ser sobrescritas por variáveis de ambiente.
     const masterPassword = process.env.MASTER_PASSWORD || "master123";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
     const userPassword = process.env.USER_PASSWORD || "user123";
 
+    // Usuários iniciais com diferentes papéis para testar a aplicação.
     const usersData = [
       {
         name: "Master Admin",
@@ -82,6 +88,7 @@ async function seed() {
 
     const createdUsers = await users.insertMany(usersData);
 
+    // Produtos iniciais de exemplo vinculados ao tenant.
     const productsData = [
       {
         tenantId: tenant._id,

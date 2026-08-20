@@ -32,7 +32,8 @@ Regras e padrões que devem ser seguidos antes e durante qualquer alteração no
 - Monte um plano a ser seguido e executado por partes.
 - Siga a estrutura e convenções já existentes no projeto.
 - Prefira editar arquivos existentes a criar novos, exceto quando solicitado.
-- Evite comentários explicativos desnecessários; o código deve ser legível por si só.
+- Sempre adicione comentários explicativos acima de funções, variáveis de ambiente, configurações e trechos de regra de negócio, explicando o propósito do código.
+- Os comentários devem ser claros e diretos: descrever **o que** o trecho faz e **por que** existe.
 
 ## 6. Antes de finalizar
 

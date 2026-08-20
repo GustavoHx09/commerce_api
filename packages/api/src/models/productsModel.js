@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 
+// Modelo de produto vinculado a um tenant com suporte a soft delete.
 const productsSchema = new mongoose.Schema({
+    // Tenant ao qual o produto pertence.
     tenantId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenants',
@@ -42,6 +44,7 @@ const productsSchema = new mongoose.Schema({
         trim: true,
     },
 
+    // Data de exclusão lógica (soft delete).
     deletedAt: {
         type: Date,
         default: null,

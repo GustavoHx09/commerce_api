@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// Fábrica de middleware que valida se um parâmetro da URL é um ObjectId válido do MongoDB.
 export const validateObjectId = (paramName = "id") => {
     return (req, res, next) => {
         const value = req.params[paramName];

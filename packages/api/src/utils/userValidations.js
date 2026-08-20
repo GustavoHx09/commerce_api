@@ -1,10 +1,12 @@
 import users from "../models/usersModel.js";
 
+// Valida se o telefone possui 10 dígitos (fixo) ou 11 dígitos (celular).
 export const isValidPhone = (phone) => {
     const cleanedPhone = phone.replace(/\D/g, "");
     return /^(?:\d{10}|\d{11})$/.test(cleanedPhone);
 };
 
+// Valida o dígito verificador de um CPF brasileiro.
 export const isValidCPF = (cpf) => {
     cpf = cpf.replace(/\D/g, "");
 
@@ -35,6 +37,7 @@ export const isValidCPF = (cpf) => {
     return true;
 };
 
+// Verifica se já existe um usuário ativo com o CPF informado.
 export async function cpfExists(cpf) {
     const user = await users.findOne({ cpf, deletedAt: null });
 
@@ -46,11 +49,13 @@ export async function cpfExists(cpf) {
     }
 }
 
+// Valida o formato básico de um endereço de email.
 export function emailIsValid(email) {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return regex.test(email);
 }
 
+// Verifica se já existe um usuário ativo com o email informado.
 export async function emailExists(email) {
     const user = await users.findOne({ email: email.toLowerCase(), deletedAt: null });
 
@@ -62,6 +67,7 @@ export async function emailExists(email) {
     }
 }
 
+// Valida o formato de um CEP brasileiro (com ou sem hífen).
 export function cepIsValid(cep) {
     const regex = /^[0-9]{5}-?[0-9]{3}$/;
     return regex.test(cep);

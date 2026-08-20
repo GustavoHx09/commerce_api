@@ -6,6 +6,7 @@ import authRoutes from '../routes/authRoutes.js';
 import dashboardRoutes from '../routes/dashboardRoute.js';
 import tenantsRoutes from '../routes/tenantsRoutes.js';
 
+// Roteador principal que agrupa todas as rotas da API.
 const router = Router();
 
 router.use('/auth', authRoutes);
