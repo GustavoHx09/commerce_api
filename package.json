@@ -1,23 +1,23 @@
 {
-  "name": "desafiomf",
+  "name": "commerce-api-monorepo",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "Monorepo do commerce API com backend (api) e frontend (web)",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "seed": "node src/database/seed.js"
+    "dev": "concurrently \"npm run dev -w api\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "start": "npm run start -w api",
+    "seed": "npm run seed -w api",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.5.0"
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   }
 }
