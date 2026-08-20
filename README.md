@@ -2,7 +2,7 @@
 
 Monorepo para uma plataforma de e-commerce multitenancy. Backend em Node.js + Express + MongoDB e frontend em Next.js + React + TypeScript + Tailwind CSS.
 
-O projeto foi estruturado para atender pequenos comércios, com controle de acesso por roles (`master`, `admin`, `user`), isolamento de dados por tenant e soft delete.
+O projeto foi estruturado para atender pequenos comércios, com controle de acesso por roles (`master`, `admin`, `user`), isolamento de dados por tenant, soft delete, autenticação com JWT refresh token em cookie `HttpOnly` e documentação interativa via Swagger.
 
 ## Tecnologias
 
@@ -105,7 +105,7 @@ packages/api/src/
 ├── repositories/  # Acesso ao banco de dados
 ├── routes/        # Definição de endpoints
 ├── services/      # Regras de negócio
-├── utils/         # Validações, helpers de resposta e paginação
+├── utils/         # Validações, helpers de resposta, paginação e repositório
 └── app.js         # Ponto de entrada centralizado
 ```
 
@@ -131,13 +131,14 @@ packages/web/
 ## Segurança
 
 - Senhas criptografadas com bcrypt
-- Autenticação via JWT
-- CORS configurado
+- Autenticação via JWT com access token curto e refresh token em cookie `HttpOnly`
+- CORS configurado para envio de cookies
 - Headers de segurança com Helmet
 - Rate limiting para prevenir brute force
 - Sanitização de entradas contra NoSQL injection
 - Logs de requisições em arquivo (`packages/api/logs/app.log`)
 - Password oculto das respostas da API (`select: false` no Mongoose)
+- Comentários explicativos padronizados no código, documentando funções e configurações
 
 ## Licença
 

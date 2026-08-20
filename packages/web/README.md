@@ -22,6 +22,9 @@ Frontend da plataforma de e-commerce, construído com Next.js, React, TypeScript
 ```
 packages/web/
 ├── app/           # App Router do Next.js
+│   ├── context/   # Contextos globais (AuthContext)
+│   ├── login/     # Página de login
+│   └── dashboard/ # Página protegida do painel
 ├── lib/           # Clientes e utilitários (axios)
 ├── types/         # Declarações de tipos globais
 ├── .env           # Variáveis de ambiente
@@ -85,13 +88,20 @@ const api = axios.create({
 export default api;
 ```
 
-Para autenticar as requisições, envie o token JWT no header `Authorization`:
+O `withCredentials: true` permite que cookies (como o refresh token `HttpOnly`) sejam enviados automaticamente para a API.
 
-```ts
-api.get('/users', {
-  headers: { Authorization: `Bearer ${token}` },
-});
-```
+### Autenticação
+
+O `AuthContext` gerencia o estado da sessão no frontend:
+
+- Guarda o **access token apenas em memória** (nunca no `localStorage`)
+- Fornece funções `login`, `logout` e o objeto `user`
+- Tenta restaurar a sessão automaticamente via `/auth/refresh` ao carregar
+
+### Axios interceptors
+
+- **Request interceptor**: adiciona o access token no header `Authorization: Bearer <token>`
+- **Response interceptor**: em caso de `401`, tenta renovar o access token com `/auth/refresh` e repete a requisição original
 
 ## Regras de validação
 

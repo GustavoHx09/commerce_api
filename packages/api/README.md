@@ -5,7 +5,7 @@ Backend da plataforma de e-commerce, construído com Node.js, Express e MongoDB.
 ## Responsabilidade
 
 - Expor endpoints REST para autenticação, usuários, produtos, tenants e dashboard
-- Gerenciar autenticação e autorização com JWT e roles
+- Gerenciar autenticação e autorização com JWT, roles e refresh token em cookie `HttpOnly`
 - Isolar dados por tenant (multitenancy)
 - Aplicar regras de negócio, validações e soft delete
 - Fornecer documentação interativa via Swagger
@@ -35,7 +35,7 @@ src/
 ├── repositories/       # Acesso ao banco de dados
 ├── routes/             # Definição de endpoints
 ├── services/           # Regras de negócio
-├── utils/              # Validações, helpers de resposta e paginação
+├── utils/              # Validações, helpers de resposta, paginação e repositório
 └── app.js              # Ponto de entrada
 ```
 
@@ -92,18 +92,34 @@ A documentação Swagger pode ser acessada em `http://localhost:3001/api-docs`.
 
 ## Autenticação
 
-A API usa autenticação Bearer JWT. Para obter um token:
+A API usa autenticação com access token Bearer JWT e refresh token em cookie `HttpOnly`.
+
+Para obter os tokens:
 
 ```bash
 POST /api/v1/auth/login
 { "email": "master@admin.com", "password": "master123" }
 ```
 
-Envie o token nas demais requisições:
+O login retorna o `accessToken` no corpo da resposta e o `refreshToken` em cookie `HttpOnly`. Envie o access token nas demais requisições:
 
 ```bash
-Authorization: Bearer <token>
+Authorization: Bearer <accessToken>
 ```
+
+Quando o access token expirar, o frontend pode chamar:
+
+```bash
+POST /api/v1/auth/refresh
+```
+
+O refresh token é lido automaticamente do cookie e um novo access token é retornado. Para encerrar a sessão:
+
+```bash
+POST /api/v1/auth/logout
+```
+
+O logout invalida o refresh token no banco e limpa o cookie.
 
 ## Roles
 
@@ -118,3 +134,5 @@ Authorization: Bearer <token>
 - Sanitização contra NoSQL injection
 - Logs de requisições em `logs/app.log`
 - Senhas nunca retornadas nas respostas (`select: false`)
+- Refresh token armazenado em cookie `HttpOnly` e `SameSite=Strict`
+- Comentários explicativos padronizados no código
