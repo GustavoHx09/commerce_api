@@ -1,10 +1,8 @@
 import users from "../models/usersModel.js";
 import products from "../models/productsModel.js";
 
-export const countUsers = () => {
-  return users.countDocuments();
-};
+const tenantFilter = (tenantId) => tenantId ? { tenantId, deletedAt: null } : { deletedAt: null };
 
-export const countProducts = () => {
-  return products.countDocuments();
-};
+export const countUsers = (tenantId) => users.countDocuments(tenantFilter(tenantId));
+
+export const countProducts = (tenantId) => products.countDocuments(tenantFilter(tenantId));

@@ -3,135 +3,46 @@ import {
     getUsersService,
     getUserByIdService,
     updateUserService,
-    deleteUserService
+    softDeleteUserService,
+    hardDeleteUserService,
 } from "../services/userService.js";
+import { successResponse } from "../utils/responseHelpers.js";
 
-// Criar usuario
 export const createUser = async (req, res) => {
-    try {
-        const data = req.body;
-
-        const user = await createUserService(data);
-
-        return res.status(201).json({
-            message: "Usuário criado com sucesso",
-            user
-        });
-
-    } catch (error) {
-        // tratamento para email duplicado
-        if (error.code === 11000) {
-            return res.status(400).json({
-                message: "Email já cadastrado, por favor insira outro!"
-            });
-        } else {
-            return res.status(error.statusCode || 500).json({
-                message: error.message || "Erro ao criar usuário"
-            });
-        }
-    }
+    const user = await createUserService(req.body, req.user);
+    return successResponse(res, { user }, "Usuário criado com sucesso", 201);
 };
 
-// Atualizar usuario
-export const updateUser = async (req, res) => {
-    try {
-        const id = req.params.id;
-        const data = req.body;
-
-        const user = await updateUserService(
-            id,
-            data,
-            { new: true }
-        );
-
-        return res.status(200).json({
-            message: "Usuário atualizado com sucesso",
-            user
-        });
-
-    } catch (error) {
-
-        // email duplicado
-        if (error.code === 11000) {
-            return res.status(400).json({
-                message: "Email já cadastrado, por favor insira outro!"
-            });
-        }
-
-        // erro vindo do service (throw com statusCode)
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({
-                message: error.message
-            });
-        }
-
-        // erro genérico
-        return res.status(500).json({
-            message: "Erro ao atualizar usuário",
-            error: error.message
-        });
-    }
-};
-
-// Deletar usuario
-export const deleteUser = async (req, res) => {
-    try {
-        const id = req.params.id;
-
-        await deleteUserService(id);
-
-        return res.status(200).json({
-            message: "Usuário deletado com sucesso"
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao deletar usuário",
-            error: error.message
-        });
-    }
-};
-
-// Buscar todos
 export const getUsers = async (req, res) => {
-    try {
-        const user = await getUsersService();
-
-        return res.status(200).json({
-            message: "Usuários listado com sucesso",
-            user
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao listar usuários",
-            error: error.message
-        });
-    }
+    const includeDeleted = req.user.role === "master" && req.query.includeDeleted === "true";
+    const result = await getUsersService(req.query, req.tenantId, includeDeleted);
+    return successResponse(res, result, "Usuários listados com sucesso");
 };
 
-// Buscar por id
 export const getUserById = async (req, res) => {
-    try {
-        const id = req.params.id;
+    const includeDeleted = req.user.role === "master" && req.query.includeDeleted === "true";
+    const user = await getUserByIdService(req.params.id, req.tenantId, includeDeleted);
 
-        const user = await getUserByIdService(id);
-
-        if (!user) {
-            return res.status(404).json({
-                message: "Usuário não encontrado"
-            });
-        }
-
-        return res.status(200).json({
-            message: "Usuário encontrado com sucesso",
-            user
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao buscar usuário",
-            error: error.message
-        });
+    if (!user) {
+        const error = new Error("Usuário não encontrado");
+        error.statusCode = 404;
+        throw error;
     }
+
+    return successResponse(res, { user }, "Usuário encontrado com sucesso");
+};
+
+export const updateUser = async (req, res) => {
+    const user = await updateUserService(req.params.id, req.body, req.user);
+    return successResponse(res, { user }, "Usuário atualizado com sucesso");
+};
+
+export const softDeleteUser = async (req, res) => {
+    await softDeleteUserService(req.params.id, req.user);
+    return successResponse(res, null, "Usuário removido com sucesso");
+};
+
+export const hardDeleteUser = async (req, res) => {
+    await hardDeleteUserService(req.params.id, req.user);
+    return successResponse(res, null, "Usuário deletado permanentemente");
 };

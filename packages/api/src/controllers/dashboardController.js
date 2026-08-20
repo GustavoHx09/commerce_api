@@ -1,27 +1,16 @@
 import { getDashboardData } from "../services/dashboardService.js";
+import { successResponse } from "../utils/responseHelpers.js";
 
 export const getDashboard = async (req, res) => {
-  try {
-    const data = await getDashboardData();
+    const data = await getDashboardData(req.tenantId);
 
     if (data.totalUsers === 0) {
-      return res.status(200).json({
-        message: "Não existe usuários cadastrados!"
-      })
-    };
+        return successResponse(res, data, "Não existe usuários cadastrados!");
+    }
 
     if (data.totalProducts === 0) {
-      return res.status(200).json({
-        message: "Não existe produtos cadastrados!"
-      })
-    };
+        return successResponse(res, data, "Não existe produtos cadastrados!");
+    }
 
-    return res.status(200).json(data);
-
-  } catch (error) {
-    return res.status(500).json({
-      message: "Erro ao carregar dashboard",
-      error: error.message
-    });
-  }
+    return successResponse(res, data, "Dashboard carregado com sucesso");
 };

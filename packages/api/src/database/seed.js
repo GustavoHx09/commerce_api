@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import users from "../models/usersModel.js";
-// import products from "../models/productsModel.js";
+import tenants from "../models/tenantsModel.js";
+import products from "../models/productsModel.js";
 import bcrypt from "bcrypt";
 
 dotenv.config();
@@ -9,41 +10,96 @@ dotenv.config();
 async function seed() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-
     console.log("Conectado ao banco");
 
-    // limpa os dados existentes
-    // await users.deleteMany();
-    // await products.deleteMany();
+    await users.deleteMany();
+    await tenants.deleteMany();
+    await products.deleteMany();
 
-    // inserindo usuários
+    const tenant = await tenants.create({
+      name: "Loja Exemplo",
+      slug: "loja-exemplo",
+      isActive: true,
+    });
+
+    const masterPassword = process.env.MASTER_PASSWORD || "master123";
+    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const userPassword = process.env.USER_PASSWORD || "user123";
+
     const usersData = [
       {
-        name: "Admin",
-        email: "admin@gmail.com",
-        password: await bcrypt.hash("123456", 10),
-        profile: "admin"
-      }
+        name: "Master Admin",
+        email: process.env.MASTER_EMAIL || "master@admin.com",
+        cpf: "00000000000",
+        phone: "11999999999",
+        address: {
+          street: "Rua Master",
+          number: "1",
+          city: "São Paulo",
+          state: "SP",
+          zipCode: "01000000",
+        },
+        password: await bcrypt.hash(masterPassword, 10),
+        role: "master",
+        tenantId: null,
+        isActive: true,
+      },
+      {
+        name: "Admin Exemplo",
+        email: process.env.ADMIN_EMAIL || "admin@lojaexemplo.com",
+        cpf: "11111111111",
+        phone: "11988888888",
+        address: {
+          street: "Rua Admin",
+          number: "2",
+          city: "São Paulo",
+          state: "SP",
+          zipCode: "02000000",
+        },
+        password: await bcrypt.hash(adminPassword, 10),
+        role: "admin",
+        tenantId: tenant._id,
+        isActive: true,
+      },
+      {
+        name: "Usuário Exemplo",
+        email: process.env.USER_EMAIL || "user@lojaexemplo.com",
+        cpf: "22222222222",
+        phone: "11977777777",
+        address: {
+          street: "Rua Usuário",
+          number: "3",
+          city: "São Paulo",
+          state: "SP",
+          zipCode: "03000000",
+        },
+        password: await bcrypt.hash(userPassword, 10),
+        role: "user",
+        tenantId: tenant._id,
+        isActive: true,
+      },
     ];
 
-    // 📦 produtos
-    // const productsData = [
-    //   {
-    //     name: "Notebook",
-    //     description: "Notebook gamer",
-    //     price: 5000,
-    //     quantityInStock: 10,
-    //     category: "eletronico"
-    //   }
-    // ];
+    const createdUsers = await users.insertMany(usersData);
 
-    await users.insertMany(usersData);
-    // await products.insertMany(productsData);
+    const productsData = [
+      {
+        tenantId: tenant._id,
+        name: "Notebook",
+        description: "Notebook gamer",
+        price: 5000,
+        costPrice: 3500,
+        quantityInStock: 10,
+        category: "eletronico",
+      },
+    ];
+
+    await products.insertMany(productsData);
 
     console.log("Banco populado com sucesso");
+    console.log("Usuários criados:", createdUsers.map((u) => ({ email: u.email, role: u.role })));
 
     process.exit();
-
   } catch (error) {
     console.error("Erro ao popular banco:", error);
     process.exit(1);

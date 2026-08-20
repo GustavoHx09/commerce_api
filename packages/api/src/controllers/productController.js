@@ -3,112 +3,46 @@ import {
     getProductService,
     getProductByIdService,
     updateProductService,
-    deleteProductService
+    softDeleteProductService,
+    hardDeleteProductService,
 } from "../services/productService.js";
+import { successResponse } from "../utils/responseHelpers.js";
 
-// Criar produto
 export const createProduct = async (req, res) => {
-    try {
-        const data = req.body;
-
-        const product = await createProductService(data);
-
-        return res.status(201).json({
-            message: "Produto criado com sucesso",
-            product
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao criar produto",
-            error: error.message
-        });
-    }
+    const product = await createProductService(req.body, req.tenantId);
+    return successResponse(res, { product }, "Produto criado com sucesso", 201);
 };
 
-// Atualizar produto
-export const updateProduct = async (req, res) => {
-    try {
-        const id = req.params.id;
-        const data = req.body;
-        const product = await updateProductService(
-            id,
-            data,
-            { new: true }
-        );
-
-        return res.status(200).json({
-            message: "Produto atualizado com sucesso",
-            product
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao atualizar produto",
-            error: error.message
-        });
-    }
-};
-
-// Deletar usuario
-export const deleteProduct = async (req, res) => {
-    try {
-        const id = req.params.id;
-
-        await deleteProductService(id);
-
-        return res.status(200).json({
-            message: "Produto deletado com sucesso"
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao deletar produto",
-            error: error.message
-        });
-    }
-};
-
-// Buscar todos
 export const getProduct = async (req, res) => {
-    try {
-        const product = await getProductService();
-
-        return res.status(200).json({
-            message: "Produtos listado com sucesso",
-            product
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao listar produto",
-            error: error.message
-        });
-    }
+    const includeDeleted = req.user.role === "master" && req.query.includeDeleted === "true";
+    const result = await getProductService(req.query, req.tenantId, includeDeleted);
+    return successResponse(res, result, "Produtos listados com sucesso");
 };
 
-// Buscar por id
 export const getProductById = async (req, res) => {
-    try {
-        const id = req.params.id;
+    const includeDeleted = req.user.role === "master" && req.query.includeDeleted === "true";
+    const product = await getProductByIdService(req.params.id, req.tenantId, includeDeleted);
 
-        const product = await getProductByIdService(id);
-
-        if (!product) {
-            return res.status(404).json({
-                message: "Produto não encontrado"
-            });
-        }
-
-        return res.status(200).json({
-            message: "Produto encontrado com sucesso",
-            product
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: "Erro ao buscar produto",
-            error: error.message
-        });
+    if (!product) {
+        const error = new Error("Produto não encontrado");
+        error.statusCode = 404;
+        throw error;
     }
+
+    return successResponse(res, { product }, "Produto encontrado com sucesso");
+};
+
+export const updateProduct = async (req, res) => {
+    const product = await updateProductService(req.params.id, req.body, req.tenantId);
+    return successResponse(res, { product }, "Produto atualizado com sucesso");
+};
+
+export const softDeleteProduct = async (req, res) => {
+    await softDeleteProductService(req.params.id, req.tenantId);
+    return successResponse(res, null, "Produto removido com sucesso");
+};
+
+export const hardDeleteProduct = async (req, res) => {
+    await hardDeleteProductService(req.params.id, req.user);
+    return successResponse(res, null, "Produto deletado permanentemente");
 };

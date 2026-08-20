@@ -1,40 +1,38 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import users from "../models/usersModel.js";
+import { appConfig } from "../config/appConfig.js";
+import { successResponse, errorResponse } from "../utils/responseHelpers.js";
 
 export const login = async (req, res) => {
-  try {
     const { email, password } = req.body;
 
-    // busca o usuário no banco pelo email
-    const user = await users.findOne({ email });
+    const user = await users.findOne({ email: email?.toLowerCase(), deletedAt: null }).select("+password");
 
     if (!user) {
-      return res.status(401).json({ message: "Credenciais inválidas" });
+        return errorResponse(res, "Credenciais inválidas", 401);
+    }
+
+    if (!user.isActive) {
+        return errorResponse(res, "Usuário inativo", 403);
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(401).json({
-        message: "Credenciais inválidas"
-      });
+        return errorResponse(res, "Credenciais inválidas", 401);
     }
 
-    // gerar token
     const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        profile: user.profile
-      },
-      process.env.JWT_SECRET,
-      process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : undefined
+        {
+            id: user._id,
+            email: user.email,
+            role: user.role,
+            tenantId: user.tenantId,
+        },
+        appConfig.jwtSecret,
+        appConfig.jwtExpiresIn ? { expiresIn: appConfig.jwtExpiresIn } : undefined
     );
 
-    return res.json({ token });
-
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
+    return successResponse(res, { token }, "Login realizado com sucesso");
 };

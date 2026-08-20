@@ -1,38 +1,53 @@
 import mongoose from "mongoose";
 
 const productsSchema = new mongoose.Schema({
+    tenantId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'tenants',
+        required: true,
+    },
+
     name: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
     },
 
     description: {
         type: String,
-        required: false
+        required: false,
     },
 
     price: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+    },
+
+    costPrice: {
+        type: Number,
+        required: true,
+        min: 0,
     },
 
     quantityInStock: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
     },
 
     category: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
     },
 
+    deletedAt: {
+        type: Date,
+        default: null,
+    },
 }, {
-    // para atualizar no banco o momento da inquisição
-    timestamps: true
+    timestamps: true,
 });
 
 export default mongoose.model('products', productsSchema);
