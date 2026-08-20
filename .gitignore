@@ -6,5 +6,7 @@ packages/*/.env
 packages/*/dist/
 packages/*/.next/
 packages/*/out/
+packages/*/tsconfig.tsbuildinfo
 .next/
 out/
+tsconfig.tsbuildinfo
