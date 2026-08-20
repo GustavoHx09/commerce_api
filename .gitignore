@@ -1,5 +1,10 @@
 node_modules/
+logs/
 dist/
 .env
 packages/*/.env
 packages/*/dist/
+packages/*/.next/
+packages/*/out/
+.next/
+out/
