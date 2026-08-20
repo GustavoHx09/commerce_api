@@ -3,7 +3,6 @@ import {
     createUserRepo,
     getUsersRepo,
     countUsersRepo,
-    baseQuery,
     getUserByIdRepo,
     getUserByIdWithPasswordRepo,
     updateUserRepo,
@@ -11,6 +10,8 @@ import {
     hardDeleteUserRepo,
 } from "../repositories/userRepo.js";
 import { isEmpty, isValid, numberFormatReplace } from "../utils/fieldsValidations.js";
+import { validateRequired, validateEnum, throwValidationError } from "../utils/serviceHelpers.js";
+import { getPagination, getSort, paginatedResponse } from "../utils/paginationHelpers.js";
 import {
     emailExists,
     emailIsValid,
@@ -20,6 +21,7 @@ import {
     cepIsValid,
 } from "../utils/userValidations.js";
 
+// Lista de campos que compõem o endereço do usuário.
 const addressFields = [
     "number",
     "street",
@@ -30,6 +32,10 @@ const addressFields = [
     "state",
 ];
 
+// Roles permitidas no sistema.
+const allowedRoles = ["master", "admin", "user"];
+
+// Padroniza o objeto de endereço, convertendo campos vazios em null.
 const normalizeAddress = (address) => {
     if (!address) return null;
 
@@ -42,44 +48,36 @@ const normalizeAddress = (address) => {
     return normalized;
 };
 
+// Valida os dados obrigatórios e regras de negócio na criação de um usuário.
 const validateCreate = async (data, actor) => {
-    if (isEmpty(data.name)) {
-        throw { statusCode: 400, message: "AVISO: O nome é obrigatório" };
-    }
-
-    if (isEmpty(data.email)) {
-        throw { statusCode: 400, message: "AVISO: O email é obrigatório" };
-    }
+    validateRequired(data.name, "nome");
+    validateRequired(data.email, "email");
 
     if (!emailIsValid(data.email)) {
-        throw { statusCode: 422, message: "AVISO: Email inválido" };
+        throwValidationError("Email inválido", 422);
     }
 
     await emailExists(data.email);
 
-    if (isEmpty(data.cpf)) {
-        throw { statusCode: 400, message: "AVISO: O CPF é obrigatório" };
-    }
+    validateRequired(data.cpf, "CPF");
 
     if (!isValidCPF(data.cpf)) {
-        throw { statusCode: 422, message: "AVISO: CPF inválido" };
+        throwValidationError("CPF inválido", 422);
     }
 
     data.cpf = numberFormatReplace(data.cpf);
     await cpfExists(data.cpf);
 
-    if (isEmpty(data.phone)) {
-        throw { statusCode: 400, message: "AVISO: O telefone é obrigatório" };
-    }
+    validateRequired(data.phone, "telefone");
 
     if (!isValidPhone(data.phone)) {
-        throw { statusCode: 422, message: "AVISO: Telefone inválido" };
+        throwValidationError("Telefone inválido", 422);
     }
 
     data.phone = numberFormatReplace(data.phone);
 
     if (isEmpty(data.password) || data.password.length < 6) {
-        throw { statusCode: 400, message: "AVISO: A senha deve ter no mínimo 6 caracteres" };
+        throwValidationError("A senha deve ter no mínimo 6 caracteres");
     }
 
     data.password = await bcrypt.hash(data.password, 10);
@@ -88,16 +86,14 @@ const validateCreate = async (data, actor) => {
         data.role = "user";
     }
 
-    if (!["master", "admin", "user"].includes(data.role)) {
-        throw { statusCode: 400, message: "AVISO: Role inválida" };
-    }
+    validateEnum(data.role, allowedRoles, "Role");
 
     if (data.role === "master" && actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode criar outro master" };
+        throwValidationError("Apenas master pode criar outro master", 403);
     }
 
     if (data.role !== "master" && isEmpty(data.tenantId)) {
-        throw { statusCode: 400, message: "AVISO: Usuários admin/user devem ter um tenantId" };
+        throwValidationError("Usuários admin/user devem ter um tenantId");
     }
 
     if (data.role === "master") {
@@ -107,28 +103,27 @@ const validateCreate = async (data, actor) => {
     data.address = normalizeAddress(data.address);
 
     if (data.address?.zipCode && !cepIsValid(data.address.zipCode)) {
-        throw { statusCode: 422, message: "AVISO: CEP inválido" };
+        throwValidationError("CEP inválido", 422);
     }
 
     if (isEmpty(data.isActive)) {
         data.isActive = true;
     } else if (typeof data.isActive !== "boolean") {
-        throw { statusCode: 400, message: "AVISO: isActive deve ser booleano" };
+        throwValidationError("isActive deve ser booleano");
     }
 };
 
+// Valida os dados enviados na atualização de um usuário.
 const validateUpdate = async (data, user, actor) => {
     if (data.name !== undefined && isEmpty(data.name)) {
-        throw { statusCode: 400, message: "AVISO: O nome é obrigatório" };
+        throwValidationError("O nome é obrigatório");
     }
 
     if (data.email !== undefined) {
-        if (isEmpty(data.email)) {
-            throw { statusCode: 400, message: "AVISO: O email é obrigatório" };
-        }
+        validateRequired(data.email, "email");
 
         if (!emailIsValid(data.email)) {
-            throw { statusCode: 422, message: "AVISO: Email inválido" };
+            throwValidationError("Email inválido", 422);
         }
 
         if (data.email.toLowerCase() !== user.email.toLowerCase()) {
@@ -137,12 +132,10 @@ const validateUpdate = async (data, user, actor) => {
     }
 
     if (data.cpf !== undefined) {
-        if (isEmpty(data.cpf)) {
-            throw { statusCode: 400, message: "AVISO: O CPF é obrigatório" };
-        }
+        validateRequired(data.cpf, "CPF");
 
         if (!isValidCPF(data.cpf)) {
-            throw { statusCode: 422, message: "AVISO: CPF inválido" };
+            throwValidationError("CPF inválido", 422);
         }
 
         data.cpf = numberFormatReplace(data.cpf);
@@ -153,12 +146,10 @@ const validateUpdate = async (data, user, actor) => {
     }
 
     if (data.phone !== undefined) {
-        if (isEmpty(data.phone)) {
-            throw { statusCode: 400, message: "AVISO: O telefone é obrigatório" };
-        }
+        validateRequired(data.phone, "telefone");
 
         if (!isValidPhone(data.phone)) {
-            throw { statusCode: 422, message: "AVISO: Telefone inválido" };
+            throwValidationError("Telefone inválido", 422);
         }
 
         data.phone = numberFormatReplace(data.phone);
@@ -166,7 +157,7 @@ const validateUpdate = async (data, user, actor) => {
 
     if (data.password) {
         if (data.password.length < 6) {
-            throw { statusCode: 400, message: "AVISO: A senha deve ter no mínimo 6 caracteres" };
+            throwValidationError("A senha deve ter no mínimo 6 caracteres");
         }
 
         const isMatch = await bcrypt.compare(data.password, user.password);
@@ -178,12 +169,10 @@ const validateUpdate = async (data, user, actor) => {
     }
 
     if (data.role !== undefined) {
-        if (!["master", "admin", "user"].includes(data.role)) {
-            throw { statusCode: 400, message: "AVISO: Role inválida" };
-        }
+        validateEnum(data.role, allowedRoles, "Role");
 
         if (data.role === "master" && actor.role !== "master") {
-            throw { statusCode: 403, message: "AVISO: Apenas master pode definir role master" };
+            throwValidationError("Apenas master pode definir role master", 403);
         }
 
         if (data.role === "master") {
@@ -192,7 +181,7 @@ const validateUpdate = async (data, user, actor) => {
     }
 
     if (data.tenantId !== undefined && data.role !== "master" && isEmpty(data.tenantId)) {
-        throw { statusCode: 400, message: "AVISO: Usuários admin/user devem ter um tenantId" };
+        throwValidationError("Usuários admin/user devem ter um tenantId");
     }
 
     if (data.address) {
@@ -205,7 +194,7 @@ const validateUpdate = async (data, user, actor) => {
         });
 
         if (data.address.zipCode && !cepIsValid(data.address.zipCode)) {
-            throw { statusCode: 422, message: "AVISO: CEP inválido" };
+            throwValidationError("CEP inválido", 422);
         }
 
         if (Object.keys(data.address).length === 0) {
@@ -216,21 +205,30 @@ const validateUpdate = async (data, user, actor) => {
     }
 
     if (data.isActive !== undefined && typeof data.isActive !== "boolean") {
-        throw { statusCode: 400, message: "AVISO: isActive deve ser booleano" };
+        throwValidationError("isActive deve ser booleano");
     }
 };
 
+// Cria um novo usuário após validar os dados e permissões.
 export const createUserService = async (data, actor) => {
     await validateCreate(data, actor);
     return await createUserRepo(data);
 };
 
+// Retorna a lista paginada de usuários do tenant com filtros opcionais.
 export const getUsersService = async (query, tenantId, includeDeleted = false) => {
-    const { getPagination, getSort, paginatedResponse } = await import("../utils/paginationHelpers.js");
     const { page, limit, skip } = getPagination(query);
     const sort = getSort(query);
 
-    const filter = { ...baseQuery(tenantId, includeDeleted) };
+    const filter = {};
+
+    if (tenantId) {
+        filter.tenantId = tenantId;
+    }
+
+    if (!includeDeleted) {
+        filter.deletedAt = null;
+    }
 
     if (query.role) {
         filter.role = query.role;
@@ -256,55 +254,59 @@ export const getUsersService = async (query, tenantId, includeDeleted = false) =
     return paginatedResponse(users, page, limit, total);
 };
 
+// Busca um usuário pelo ID respeitando o tenant e o soft delete.
 export const getUserByIdService = (id, tenantId, includeDeleted = false) => {
     return getUserByIdRepo(id, tenantId, includeDeleted);
 };
 
+// Atualiza um usuário existente com validação de permissões.
 export const updateUserService = async (id, data, actor) => {
     const user = await getUserByIdWithPasswordRepo(id, actor.tenantId, true);
 
     if (!user) {
-        throw { statusCode: 404, message: "AVISO: Usuário não encontrado" };
+        throwValidationError("Usuário não encontrado", 404);
     }
 
     if (actor.role !== "master" && user.tenantId?.toString() !== actor.tenantId?.toString()) {
-        throw { statusCode: 403, message: "AVISO: Acesso negado a este usuário" };
+        throwValidationError("Acesso negado a este usuário", 403);
     }
 
     if (user.role === "master" && actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode alterar outro master" };
+        throwValidationError("Apenas master pode alterar outro master", 403);
     }
 
     if (data.role && data.role !== user.role && actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode alterar role" };
+        throwValidationError("Apenas master pode alterar role", 403);
     }
 
     await validateUpdate(data, user, actor);
 
     if (Object.keys(data).length === 0) {
-        throw { statusCode: 400, message: "AVISO: Nenhum campo válido para atualização" };
+        throwValidationError("Nenhum campo válido para atualização");
     }
 
     return await updateUserRepo(id, data, actor.tenantId);
 };
 
+// Realiza soft delete de um usuário, marcando o campo deletedAt.
 export const softDeleteUserService = async (id, actor) => {
     const user = await getUserByIdRepo(id, actor.tenantId, false);
 
     if (!user) {
-        throw { statusCode: 404, message: "AVISO: Usuário não encontrado" };
+        throwValidationError("Usuário não encontrado", 404);
     }
 
     if (user.role === "master" && actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode remover outro master" };
+        throwValidationError("Apenas master pode remover outro master", 403);
     }
 
     return await softDeleteUserRepo(id, actor.tenantId);
 };
 
+// Remove permanentemente um usuário do banco de dados. Restrito a master.
 export const hardDeleteUserService = async (id, actor) => {
     if (actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode fazer hard delete" };
+        throwValidationError("Apenas master pode fazer hard delete", 403);
     }
 
     return await hardDeleteUserRepo(id);

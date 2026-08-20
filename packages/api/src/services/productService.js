@@ -2,77 +2,73 @@ import {
     createProductRepo,
     getProductsRepo,
     countProductsRepo,
-    baseQuery,
     getProductByIdRepo,
     updateProductRepo,
     softDeleteProductRepo,
     hardDeleteProductRepo,
 } from "../repositories/productRepo.js";
 import { isEmpty } from "../utils/fieldsValidations.js";
+import {
+    sanitizeNumberFields,
+    throwValidationError,
+} from "../utils/serviceHelpers.js";
+import { getPagination, getSort, paginatedResponse } from "../utils/paginationHelpers.js";
 
+// Campos obrigatórios na criação de um produto.
+const requiredCreateFields = ["name", "price", "costPrice", "quantityInStock", "category"];
+
+// Campos numéricos que devem ser validados e convertidos.
+const numericFields = ["price", "costPrice", "quantityInStock"];
+
+// Garante que todos os campos obrigatórios estejam presentes na criação.
 const validateCreate = (data) => {
-    const required = ["name", "price", "costPrice", "quantityInStock", "category"];
-    const missing = required.filter((field) => isEmpty(data[field]));
+    const missing = requiredCreateFields.filter((field) => isEmpty(data[field]));
 
     if (missing.length > 0) {
-        throw { statusCode: 400, message: `AVISO: Campos obrigatórios faltando: ${missing.join(", ")}` };
+        throwValidationError(`Campos obrigatórios faltando: ${missing.join(", ")}`);
     }
 
-    const numericFields = {
-        price: data.price,
-        costPrice: data.costPrice,
-        quantityInStock: data.quantityInStock,
-    };
-
-    for (const [field, value] of Object.entries(numericFields)) {
-        if (isNaN(value) || Number(value) < 0) {
-            throw { statusCode: 422, message: `AVISO: ${field} deve ser um número positivo` };
-        }
-    }
-
-    data.price = Number(data.price);
-    data.costPrice = Number(data.costPrice);
-    data.quantityInStock = Number(data.quantityInStock);
+    sanitizeNumberFields(data, numericFields);
 };
 
+// Valida os campos enviados na atualização de um produto.
 const validateUpdate = (data) => {
-    const fields = ["name", "description", "category"];
+    const textFields = ["name", "description", "category"];
 
-    fields.forEach((field) => {
+    textFields.forEach((field) => {
         if (data[field] === "") {
             delete data[field];
         }
     });
 
-    const numericFields = ["price", "costPrice", "quantityInStock"];
-
-    numericFields.forEach((field) => {
-        if (data[field] === null || data[field] === undefined) {
-            delete data[field];
-        } else if (isNaN(data[field]) || Number(data[field]) < 0) {
-            throw { statusCode: 422, message: `AVISO: ${field} deve ser um número positivo` };
-        } else {
-            data[field] = Number(data[field]);
-        }
-    });
+    sanitizeNumberFields(data, numericFields);
 
     if (Object.keys(data).length === 0) {
-        throw { statusCode: 400, message: "AVISO: Nenhum campo válido para atualização" };
+        throwValidationError("Nenhum campo válido para atualização");
     }
 };
 
+// Cria um novo produto vinculado ao tenant.
 export const createProductService = async (data, tenantId) => {
     validateCreate(data);
     data.tenantId = tenantId;
     return await createProductRepo(data);
 };
 
-export const getProductService = async (query, tenantId, includeDeleted = false) => {
-    const { getPagination, getSort, paginatedResponse } = await import("../utils/paginationHelpers.js");
+// Retorna a lista paginada de produtos do tenant com filtros opcionais.
+export const getProductsService = async (query, tenantId, includeDeleted = false) => {
     const { page, limit, skip } = getPagination(query);
     const sort = getSort(query, "name");
 
-    const filter = { ...baseQuery(tenantId, includeDeleted) };
+    const filter = {};
+
+    if (tenantId) {
+        filter.tenantId = tenantId;
+    }
+
+    if (!includeDeleted) {
+        filter.deletedAt = null;
+    }
 
     if (query.category) {
         filter.category = { $regex: query.category, $options: "i" };
@@ -102,15 +98,17 @@ export const getProductService = async (query, tenantId, includeDeleted = false)
     return paginatedResponse(products, page, limit, total);
 };
 
+// Busca um produto pelo ID respeitando o tenant e o soft delete.
 export const getProductByIdService = (id, tenantId, includeDeleted = false) => {
     return getProductByIdRepo(id, tenantId, includeDeleted);
 };
 
+// Atualiza um produto existente do tenant.
 export const updateProductService = async (id, data, tenantId) => {
     const product = await getProductByIdRepo(id, tenantId, false);
 
     if (!product) {
-        throw { statusCode: 404, message: "AVISO: Produto não encontrado" };
+        throwValidationError("Produto não encontrado", 404);
     }
 
     validateUpdate(data);
@@ -118,19 +116,21 @@ export const updateProductService = async (id, data, tenantId) => {
     return await updateProductRepo(id, data, tenantId);
 };
 
+// Realiza soft delete de um produto, marcando o campo deletedAt.
 export const softDeleteProductService = async (id, tenantId) => {
     const product = await getProductByIdRepo(id, tenantId, false);
 
     if (!product) {
-        throw { statusCode: 404, message: "AVISO: Produto não encontrado" };
+        throwValidationError("Produto não encontrado", 404);
     }
 
     return await softDeleteProductRepo(id, tenantId);
 };
 
+// Remove permanentemente um produto do banco de dados. Restrito a master.
 export const hardDeleteProductService = async (id, actor) => {
     if (actor.role !== "master") {
-        throw { statusCode: 403, message: "AVISO: Apenas master pode fazer hard delete" };
+        throwValidationError("Apenas master pode fazer hard delete", 403);
     }
 
     return await hardDeleteProductRepo(id);
