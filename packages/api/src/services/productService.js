@@ -8,6 +8,7 @@ import {
     hardDeleteProductRepo,
 } from "../repositories/productRepo.js";
 import { isEmpty } from "../utils/fieldsValidations.js";
+import { baseQuery } from "../utils/repositoryHelpers.js";
 import {
     sanitizeNumberFields,
     throwValidationError,
@@ -60,15 +61,7 @@ export const getProductsService = async (query, tenantId, includeDeleted = false
     const { page, limit, skip } = getPagination(query);
     const sort = getSort(query, "name");
 
-    const filter = {};
-
-    if (tenantId) {
-        filter.tenantId = tenantId;
-    }
-
-    if (!includeDeleted) {
-        filter.deletedAt = null;
-    }
+    const filter = { ...baseQuery(tenantId, includeDeleted) };
 
     if (query.category) {
         filter.category = { $regex: query.category, $options: "i" };

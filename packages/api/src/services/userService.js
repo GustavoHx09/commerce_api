@@ -9,6 +9,7 @@ import {
     softDeleteUserRepo,
     hardDeleteUserRepo,
 } from "../repositories/userRepo.js";
+import { baseQuery } from "../utils/repositoryHelpers.js";
 import { isEmpty, isValid, numberFormatReplace } from "../utils/fieldsValidations.js";
 import { validateRequired, validateEnum, throwValidationError } from "../utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../utils/paginationHelpers.js";
@@ -220,15 +221,7 @@ export const getUsersService = async (query, tenantId, includeDeleted = false) =
     const { page, limit, skip } = getPagination(query);
     const sort = getSort(query);
 
-    const filter = {};
-
-    if (tenantId) {
-        filter.tenantId = tenantId;
-    }
-
-    if (!includeDeleted) {
-        filter.deletedAt = null;
-    }
+    const filter = { ...baseQuery(tenantId, includeDeleted) };
 
     if (query.role) {
         filter.role = query.role;
