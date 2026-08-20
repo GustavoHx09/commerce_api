@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// Modelo de usuário com suporte a múltiplos roles, vinculação a tenant e soft delete.
 const usersSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -39,6 +40,7 @@ const usersSchema = new mongoose.Schema({
         zipCode: { type: String, trim: true },
     },
 
+    // Senha criptografada. Não é retornada em consultas por padrão.
     password: {
         type: String,
         required: true,
@@ -46,26 +48,37 @@ const usersSchema = new mongoose.Schema({
         select: false,
     },
 
+    // Papel do usuário no sistema: master, admin ou user.
     role: {
         type: String,
         enum: ['master', 'admin', 'user'],
         default: 'user',
     },
 
+    // Tenant ao qual o usuário pertece. Null para usuários master.
     tenantId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenants',
         default: null,
     },
 
+    // Indica se o usuário está ativo no sistema.
     isActive: {
         type: Boolean,
         default: true,
     },
 
+    // Data de exclusão lógica (soft delete).
     deletedAt: {
         type: Date,
         default: null,
+    },
+
+    // Refresh token hasheado usado para renovar o access token.
+    refreshToken: {
+        type: String,
+        default: null,
+        select: false,
     },
 }, {
     timestamps: true,
