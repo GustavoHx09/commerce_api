@@ -88,20 +88,15 @@ const api = axios.create({
 export default api;
 ```
 
-O `withCredentials: true` permite que cookies (como o refresh token `HttpOnly`) sejam enviados automaticamente para a API.
+O `withCredentials: true` permite que o cookie JWT `HttpOnly` seja enviado automaticamente para a API.
 
 ### Autenticação
 
 O `AuthContext` gerencia o estado da sessão no frontend:
 
-- Guarda o **access token apenas em memória** (nunca no `localStorage`)
 - Fornece funções `login`, `logout` e o objeto `user`
-- Tenta restaurar a sessão automaticamente via `/auth/refresh` ao carregar
-
-### Axios interceptors
-
-- **Request interceptor**: adiciona o access token no header `Authorization: Bearer <token>`
-- **Response interceptor**: em caso de `401`, tenta renovar o access token com `/auth/refresh` e repete a requisição original
+- Não armazena nem acessa o JWT, pois ele fica protegido no cookie `HttpOnly`
+- Restaura os dados da sessão automaticamente via `/auth/session` ao carregar
 
 ## Regras de validação
 

@@ -2,13 +2,13 @@
 
 Monorepo para uma plataforma de e-commerce multitenancy. Backend em Node.js + Express + MongoDB e frontend em Next.js + React + TypeScript + Tailwind CSS.
 
-O projeto foi estruturado para atender pequenos comércios, com controle de acesso por roles (`master`, `admin`, `user`), isolamento de dados por tenant, soft delete, autenticação com JWT refresh token em cookie `HttpOnly` e documentação interativa via Swagger.
+O projeto foi estruturado para atender pequenos comércios, com controle de acesso por roles (`master`, `admin`, `user`), isolamento de dados por tenant, soft delete e autenticação com JWT refresh token em cookie `HttpOnly`.
 
 ## Tecnologias
 
 - **Backend**: Node.js, Express, MongoDB (Mongoose), JWT, Bcrypt
 - **Frontend**: Next.js, React, TypeScript, Tailwind CSS, Axios
-- **Ferramentas**: ESLint, Prettier, Vitest, Swagger
+- **Ferramentas**: ESLint, Prettier, Vitest
 
 ## Estrutura do monorepo
 
@@ -68,7 +68,6 @@ npm run dev
 
 - API: `http://localhost:3001`
 - Web: `http://localhost:3000`
-- Swagger: `http://localhost:3001/api-docs`
 
 ### Rodar separadamente
 
@@ -97,15 +96,9 @@ npm run dev -w web
 
 ```
 packages/api/src/
-├── config/        # Configurações (banco, env, swagger, logger)
-├── controllers/   # Lógica das rotas HTTP
-├── database/      # Seed e scripts auxiliares
-├── middlewares/   # Autenticação, segurança, validações, erros
-├── models/        # Modelos do Mongoose
-├── repositories/  # Acesso ao banco de dados
-├── routes/        # Definição de endpoints
-├── services/      # Regras de negócio
-├── utils/         # Validações, helpers de resposta, paginação e repositório
+├── modules/       # Domínios com controllers, services, repositories, models e rotas
+├── shared/        # Configurações, banco, middlewares e utilitários compartilhados
+├── routes.js      # Agregador das rotas dos módulos
 └── app.js         # Ponto de entrada centralizado
 ```
 
@@ -124,15 +117,15 @@ packages/web/
 ## Integração entre API e Web
 
 - O frontend se comunica com a API via Axios, usando a URL definida em `packages/web/.env`.
-- A autenticação é feita com JWT. O token é enviado no header `Authorization`.
+- A autenticação é feita com um JWT armazenado em cookie `HttpOnly`.
 - A API identifica o tenant do usuário pelo payload do JWT e filtra todos os dados por `tenantId`.
-- O CORS da API é configurado para aceitar a origem do frontend definida em `CORS_URL`.
+- O CORS e a validação de origem aceitam o frontend definido em `CORS_URL`.
 
 ## Segurança
 
 - Senhas criptografadas com bcrypt
-- Autenticação via JWT com access token curto e refresh token em cookie `HttpOnly`
-- CORS configurado para envio de cookies
+- Autenticação via JWT em cookie `HttpOnly`, `Secure` e `SameSite=None` em produção
+- CORS e validação de origem configurados para envio seguro de cookies
 - Headers de segurança com Helmet
 - Rate limiting para prevenir brute force
 - Sanitização de entradas contra NoSQL injection

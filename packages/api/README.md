@@ -8,7 +8,6 @@ Backend da plataforma de e-commerce, construído com Node.js, Express e MongoDB.
 - Gerenciar autenticação e autorização com JWT, roles e refresh token em cookie `HttpOnly`
 - Isolar dados por tenant (multitenancy)
 - Aplicar regras de negócio, validações e soft delete
-- Fornecer documentação interativa via Swagger
 
 ## Tecnologias
 
@@ -20,22 +19,15 @@ Backend da plataforma de e-commerce, construído com Node.js, Express e MongoDB.
 - Helmet
 - Express Rate Limit
 - Morgan
-- Swagger
 - Vitest
 
 ## Estrutura
 
 ```
 src/
-├── config/             # Configurações (DB, env, swagger, logger)
-├── controllers/        # Lógica das rotas HTTP
-├── database/           # Seed e scripts
-├── middlewares/        # Autenticação, segurança, validações, erros
-├── models/             # Modelos do Mongoose
-├── repositories/       # Acesso ao banco de dados
-├── routes/             # Definição de endpoints
-├── services/           # Regras de negócio
-├── utils/              # Validações, helpers de resposta, paginação e repositório
+├── modules/            # Domínios com controllers, services, repositories, models e rotas
+├── shared/             # Configurações, banco, middlewares e utilitários compartilhados
+├── routes.js           # Agregador das rotas dos módulos
 └── app.js              # Ponto de entrada
 ```
 
@@ -77,8 +69,6 @@ npm run dev
 
 A API estará disponível em `http://localhost:3001`.
 
-A documentação Swagger pode ser acessada em `http://localhost:3001/api-docs`.
-
 ## Scripts
 
 | Comando | Descrição |
@@ -92,34 +82,28 @@ A documentação Swagger pode ser acessada em `http://localhost:3001/api-docs`.
 
 ## Autenticação
 
-A API usa autenticação com access token Bearer JWT e refresh token em cookie `HttpOnly`.
+A API usa um JWT de sessão armazenado em cookie `HttpOnly`. O navegador envia esse cookie automaticamente e o JavaScript do frontend não consegue acessar seu conteúdo.
 
-Para obter os tokens:
+Para iniciar a sessão:
 
 ```bash
 POST /api/v1/auth/login
 { "email": "master@admin.com", "password": "master123" }
 ```
 
-O login retorna o `accessToken` no corpo da resposta e o `refreshToken` em cookie `HttpOnly`. Envie o access token nas demais requisições:
+Para restaurar os dados da sessão após recarregar a página:
 
 ```bash
-Authorization: Bearer <accessToken>
+GET /api/v1/auth/session
 ```
 
-Quando o access token expirar, o frontend pode chamar:
-
-```bash
-POST /api/v1/auth/refresh
-```
-
-O refresh token é lido automaticamente do cookie e um novo access token é retornado. Para encerrar a sessão:
+Para encerrar a sessão:
 
 ```bash
 POST /api/v1/auth/logout
 ```
 
-O logout invalida o refresh token no banco e limpa o cookie.
+O logout remove o cookie do navegador. Após sete dias, o JWT expira e um novo login é necessário.
 
 ## Roles
 
