@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createProductService } from '../productService.js';
 
 const mockCreateProductRepo = vi.fn();
+const mockAuditAction = vi.fn();
 
 vi.mock('.././productRepo.js', () => ({
     createProductRepo: (...args) => mockCreateProductRepo(...args),
@@ -12,6 +13,11 @@ vi.mock('.././productRepo.js', () => ({
     updateProductRepo: vi.fn(),
     softDeleteProductRepo: vi.fn(),
     hardDeleteProductRepo: vi.fn(),
+}));
+
+vi.mock('../../audit/auditHelpers.js', () => ({
+    auditAction: (...args) => mockAuditAction(...args),
+    toPlain: (doc) => doc,
 }));
 
 describe('productService', () => {
@@ -25,6 +31,7 @@ describe('productService', () => {
                 category: 'eletronico',
             };
             const tenantId = '64abc';
+            const actorId = '64def';
 
             const expectedData = {
                 name: 'Notebook',
@@ -36,8 +43,9 @@ describe('productService', () => {
             };
 
             mockCreateProductRepo.mockResolvedValue({ _id: '123', ...expectedData });
+            mockAuditAction.mockResolvedValue({});
 
-            const result = await createProductService(data, tenantId);
+            const result = await createProductService(data, tenantId, actorId);
 
             expect(result).toEqual({ _id: '123', ...expectedData });
             expect(mockCreateProductRepo).toHaveBeenCalledWith({
@@ -56,7 +64,7 @@ describe('productService', () => {
                 costPrice: '3500',
                 quantityInStock: '10',
                 category: 'eletronico',
-            }, '64abc')).rejects.toThrow('Campos obrigatórios faltando');
+            }, '64abc', '64def')).rejects.toThrow('Campos obrigatórios faltando');
         });
 
         it('throws error when price is negative', async () => {
@@ -66,7 +74,7 @@ describe('productService', () => {
                 costPrice: '3500',
                 quantityInStock: '10',
                 category: 'eletronico',
-            }, '64abc')).rejects.toThrow('deve ser um número positivo');
+            }, '64abc', '64def')).rejects.toThrow('deve ser um número positivo');
         });
     });
 });

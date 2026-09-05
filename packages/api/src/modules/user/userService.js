@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import tenants from "../tenant/tenantModel.js";
 import {
     createUserRepo,
     getUsersRepo,
@@ -10,19 +11,12 @@ import {
     hardDeleteUserRepo,
 } from "./userRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
-import { isEmpty, isValid, numberFormatReplace } from "../../shared/utils/fieldsValidations.js";
+import { isEmpty, isValid, numberFormatReplace, isValidPhone, isValidCPF, cepIsValid, emailIsValid } from "../../shared/utils/fieldsValidations.js";
 import { validateRequired, validateEnum, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
-import {
-    emailExists,
-    emailIsValid,
-    cpfExists,
-    isValidCPF,
-    isValidPhone,
-    cepIsValid,
-} from "./userValidations.js";
+import { emailExists, cpfExists } from "./userValidations.js";
+import { auditAction } from "../audit/auditHelpers.js";
 
-// Lista de campos que compõem o endereço do usuário.
 const addressFields = [
     "number",
     "street",
@@ -33,7 +27,6 @@ const addressFields = [
     "state",
 ];
 
-// Roles permitidas no sistema.
 const allowedRoles = ["master", "admin", "user"];
 
 // Padroniza o objeto de endereço, convertendo campos vazios em null.
@@ -47,6 +40,39 @@ const normalizeAddress = (address) => {
     });
 
     return normalized;
+};
+
+// Valida o array de permissões customizadas, se fornecido.
+const validatePermissions = (permissions) => {
+    if (permissions === undefined) return;
+
+    if (!Array.isArray(permissions)) {
+        throwValidationError("permissions deve ser um array de strings", 422);
+    }
+
+    if (permissions.some((p) => typeof p !== "string" || p.trim() === "")) {
+        throwValidationError("permissions deve conter apenas strings não vazias", 422);
+    }
+};
+
+// Verifica se o tenant existe e se ainda há vaga para criar usuários.
+const checkTenantCapacity = async (tenantId, excludeUserId = null) => {
+    const tenant = await tenants.findOne({ _id: tenantId, deletedAt: null });
+
+    if (!tenant) {
+        throwValidationError("Tenant não encontrado", 404);
+    }
+
+    const filter = { tenantId, role: { $ne: "master" }, deletedAt: null };
+    if (excludeUserId) filter._id = { $ne: excludeUserId };
+
+    const count = await countUsersRepo(filter);
+
+    if (count >= tenant.maxUsers) {
+        throwValidationError("Limite de usuários do plano atingido", 403);
+    }
+
+    return tenant;
 };
 
 // Valida os dados obrigatórios e regras de negócio na criação de um usuário.
@@ -97,9 +123,15 @@ const validateCreate = async (data, actor) => {
         throwValidationError("Usuários admin/user devem ter um tenantId");
     }
 
+    if (data.role !== "master") {
+        await checkTenantCapacity(data.tenantId);
+    }
+
     if (data.role === "master") {
         data.tenantId = null;
     }
+
+    validatePermissions(data.permissions);
 
     data.address = normalizeAddress(data.address);
 
@@ -185,6 +217,12 @@ const validateUpdate = async (data, user, actor) => {
         throwValidationError("Usuários admin/user devem ter um tenantId");
     }
 
+    if (data.tenantId !== undefined && data.tenantId && data.tenantId?.toString?.() !== user.tenantId?.toString?.()) {
+        await checkTenantCapacity(data.tenantId, user._id);
+    }
+
+    validatePermissions(data.permissions);
+
     if (data.address) {
         const currentAddress = user.address || {};
 
@@ -201,7 +239,7 @@ const validateUpdate = async (data, user, actor) => {
         if (Object.keys(data.address).length === 0) {
             delete data.address;
         } else {
-            data.address = { ...currentAddress, ...data.address };
+            data.address = { ...currentAddress, ...normalizeAddress(data.address) };
         }
     }
 
@@ -213,7 +251,12 @@ const validateUpdate = async (data, user, actor) => {
 // Cria um novo usuário após validar os dados e permissões.
 export const createUserService = async (data, actor) => {
     await validateCreate(data, actor);
-    return await createUserRepo(data);
+
+    const user = await createUserRepo(data);
+
+    await auditAction("user", "create", null, user, actor.id);
+
+    return user;
 };
 
 // Retorna a lista paginada de usuários do tenant com filtros opcionais.
@@ -260,7 +303,7 @@ export const updateUserService = async (id, data, actor) => {
         throwValidationError("Usuário não encontrado", 404);
     }
 
-    if (actor.role !== "master" && user.tenantId?.toString() !== actor.tenantId?.toString()) {
+    if (actor.role !== "master" && user.tenantId?.toString?.() !== actor.tenantId?.toString?.()) {
         throwValidationError("Acesso negado a este usuário", 403);
     }
 
@@ -278,7 +321,11 @@ export const updateUserService = async (id, data, actor) => {
         throwValidationError("Nenhum campo válido para atualização");
     }
 
-    return await updateUserRepo(id, data, actor.tenantId);
+    const updatedUser = await updateUserRepo(id, data, actor.tenantId);
+
+    await auditAction("user", "update", user, updatedUser, actor.id);
+
+    return updatedUser;
 };
 
 // Realiza soft delete de um usuário, marcando o campo deletedAt.
@@ -293,7 +340,11 @@ export const softDeleteUserService = async (id, actor) => {
         throwValidationError("Apenas master pode remover outro master", 403);
     }
 
-    return await softDeleteUserRepo(id, actor.tenantId);
+    const deletedUser = await softDeleteUserRepo(id, actor.tenantId);
+
+    await auditAction("user", "delete", user, deletedUser, actor.id);
+
+    return deletedUser;
 };
 
 // Remove permanentemente um usuário do banco de dados. Restrito a master.
@@ -301,6 +352,14 @@ export const hardDeleteUserService = async (id, actor) => {
     if (actor.role !== "master") {
         throwValidationError("Apenas master pode fazer hard delete", 403);
     }
+
+    const user = await getUserByIdWithPasswordRepo(id, null, true);
+
+    if (!user) {
+        throwValidationError("Usuário não encontrado", 404);
+    }
+
+    await auditAction("user", "delete", user, null, actor.id);
 
     return await hardDeleteUserRepo(id);
 };

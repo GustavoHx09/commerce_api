@@ -9,7 +9,7 @@ import { successResponse } from "../../shared/utils/responseHelpers.js";
 
 // Cria um novo tenant. Apenas master pode executar.
 export const createTenant = async (req, res) => {
-    const tenant = await createTenantService(req.body);
+    const tenant = await createTenantService(req.body, req.user.id);
     return successResponse(res, { tenant }, "Tenant criado com sucesso", 201);
 };
 
@@ -27,12 +27,12 @@ export const getTenantById = async (req, res) => {
 
 // Atualiza os dados de um tenant.
 export const updateTenant = async (req, res) => {
-    const tenant = await updateTenantService(req.params.id, req.body);
+    const tenant = await updateTenantService(req.params.id, req.body, req.user.id);
     return successResponse(res, { tenant }, "Tenant atualizado com sucesso");
 };
 
-// Remove permanentemente um tenant. Apenas master pode executar.
+// Realiza soft delete de um tenant. Apenas master pode executar.
 export const deleteTenant = async (req, res) => {
-    await deleteTenantService(req.params.id);
-    return successResponse(res, null, "Tenant deletado com sucesso");
+    await deleteTenantService(req.params.id, req.user.id);
+    return successResponse(res, null, "Tenant removido com sucesso");
 };

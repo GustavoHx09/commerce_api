@@ -19,10 +19,24 @@ async function seed() {
     await tenants.deleteMany();
     await products.deleteMany();
 
-    // Cria o tenant de exemplo.
+    // Cria o tenant de exemplo com dados comerciais completos.
     const tenant = await tenants.create({
       name: "Loja Exemplo",
       slug: "loja-exemplo",
+      document: "04079412772007",
+      documentType: "cnpj",
+      phone: "1133334444",
+      email: "contato@lojaexemplo.com",
+      address: {
+        street: "Rua do Comércio",
+        number: "100",
+        complement: "Sala 10",
+        neighborhood: "Centro",
+        city: "São Paulo",
+        state: "SP",
+        zipCode: "01000000",
+      },
+      plan: "basic",
       isActive: true,
     });
 
@@ -36,7 +50,7 @@ async function seed() {
       {
         name: "Master Admin",
         email: process.env.MASTER_EMAIL || "master@admin.com",
-        cpf: "00000000000",
+        cpf: "52998224725",
         phone: "11999999999",
         address: {
           street: "Rua Master",
@@ -53,7 +67,7 @@ async function seed() {
       {
         name: "Admin Exemplo",
         email: process.env.ADMIN_EMAIL || "admin@lojaexemplo.com",
-        cpf: "11111111111",
+        cpf: "13651813169",
         phone: "11988888888",
         address: {
           street: "Rua Admin",
@@ -70,7 +84,7 @@ async function seed() {
       {
         name: "Usuário Exemplo",
         email: process.env.USER_EMAIL || "user@lojaexemplo.com",
-        cpf: "22222222222",
+        cpf: "95396167866",
         phone: "11977777777",
         address: {
           street: "Rua Usuário",

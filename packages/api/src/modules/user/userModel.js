@@ -68,6 +68,12 @@ const usersSchema = new mongoose.Schema({
         default: true,
     },
 
+    // Permissões customizadas. Se vazio, as permissões padrão da role são aplicadas.
+    permissions: {
+        type: [String],
+        default: [],
+    },
+
     // Data de exclusão lógica (soft delete).
     deletedAt: {
         type: Date,

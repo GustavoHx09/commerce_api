@@ -11,7 +11,7 @@ import { ensureFound } from "../../shared/utils/controllerHelpers.js";
 
 // Cria um novo produto vinculado ao tenant atual.
 export const createProduct = async (req, res) => {
-    const product = await createProductService(req.body, req.tenantId);
+    const product = await createProductService(req.body, req.tenantId, req.user.id);
     return successResponse(res, { product }, "Produto criado com sucesso", 201);
 };
 
@@ -32,13 +32,13 @@ export const getProductById = async (req, res) => {
 
 // Atualiza os dados de um produto existente.
 export const updateProduct = async (req, res) => {
-    const product = await updateProductService(req.params.id, req.body, req.tenantId);
+    const product = await updateProductService(req.params.id, req.body, req.tenantId, req.user.id);
     return successResponse(res, { product }, "Produto atualizado com sucesso");
 };
 
 // Realiza soft delete de um produto do tenant atual.
 export const softDeleteProduct = async (req, res) => {
-    await softDeleteProductService(req.params.id, req.tenantId);
+    await softDeleteProductService(req.params.id, req.tenantId, req.user.id);
     return successResponse(res, null, "Produto removido com sucesso");
 };
 

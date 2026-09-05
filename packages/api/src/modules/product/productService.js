@@ -14,6 +14,7 @@ import {
     throwValidationError,
 } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
+import { auditAction } from "../audit/auditHelpers.js";
 
 // Campos obrigatórios na criação de um produto.
 const requiredCreateFields = ["name", "price", "costPrice", "quantityInStock", "category"];
@@ -50,10 +51,15 @@ const validateUpdate = (data) => {
 };
 
 // Cria um novo produto vinculado ao tenant.
-export const createProductService = async (data, tenantId) => {
+export const createProductService = async (data, tenantId, actorId) => {
     validateCreate(data);
     data.tenantId = tenantId;
-    return await createProductRepo(data);
+
+    const product = await createProductRepo(data);
+
+    await auditAction("product", "create", null, product, actorId);
+
+    return product;
 };
 
 // Retorna a lista paginada de produtos do tenant com filtros opcionais.
@@ -97,7 +103,7 @@ export const getProductByIdService = (id, tenantId, includeDeleted = false) => {
 };
 
 // Atualiza um produto existente do tenant.
-export const updateProductService = async (id, data, tenantId) => {
+export const updateProductService = async (id, data, tenantId, actorId) => {
     const product = await getProductByIdRepo(id, tenantId, false);
 
     if (!product) {
@@ -106,18 +112,26 @@ export const updateProductService = async (id, data, tenantId) => {
 
     validateUpdate(data);
 
-    return await updateProductRepo(id, data, tenantId);
+    const updatedProduct = await updateProductRepo(id, data, tenantId);
+
+    await auditAction("product", "update", product, updatedProduct, actorId);
+
+    return updatedProduct;
 };
 
 // Realiza soft delete de um produto, marcando o campo deletedAt.
-export const softDeleteProductService = async (id, tenantId) => {
+export const softDeleteProductService = async (id, tenantId, actorId) => {
     const product = await getProductByIdRepo(id, tenantId, false);
 
     if (!product) {
         throwValidationError("Produto não encontrado", 404);
     }
 
-    return await softDeleteProductRepo(id, tenantId);
+    const deletedProduct = await softDeleteProductRepo(id, tenantId);
+
+    await auditAction("product", "delete", product, deletedProduct, actorId);
+
+    return deletedProduct;
 };
 
 // Remove permanentemente um produto do banco de dados. Restrito a master.
@@ -125,6 +139,14 @@ export const hardDeleteProductService = async (id, actor) => {
     if (actor.role !== "master") {
         throwValidationError("Apenas master pode fazer hard delete", 403);
     }
+
+    const product = await getProductByIdRepo(id, null, true);
+
+    if (!product) {
+        throwValidationError("Produto não encontrado", 404);
+    }
+
+    await auditAction("product", "delete", product, null, actor.id);
 
     return await hardDeleteProductRepo(id);
 };
