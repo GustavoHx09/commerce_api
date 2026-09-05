@@ -4,8 +4,8 @@ Backend da plataforma de e-commerce, construído com Node.js, Express e MongoDB.
 
 ## Responsabilidade
 
-- Expor endpoints REST para autenticação, usuários, produtos, tenants e dashboard
-- Gerenciar autenticação e autorização com JWT, roles e refresh token em cookie `HttpOnly`
+- Expor endpoints REST para autenticação, usuários, produtos, tenants, categorias, clientes, fornecedores, estoque e dashboard
+- Gerenciar autenticação e autorização com JWT, roles, permissões granulares e presets de permissão em cookie `HttpOnly`
 - Isolar dados por tenant (multitenancy)
 - Aplicar regras de negócio, validações e soft delete
 
@@ -103,13 +103,33 @@ Para encerrar a sessão:
 POST /api/v1/auth/logout
 ```
 
-O logout remove o cookie do navegador. Após sete dias, o JWT expira e um novo login é necessário.
+O logout remove o cookie do navegador e adiciona o hash do token atual à blacklist, invalidando-o imediatamente. Após sete dias, o JWT expira e um novo login é necessário.
+
+Sessões também são revogadas automaticamente quando a senha do usuário é alterada: tokens emitidos antes da troca passam a ser rejeitados pelo middleware de autenticação.
 
 ## Roles
 
 - `master` → acesso total, gerencia tenants
-- `admin` → gerencia usuários e produtos do próprio tenant
-- `user` → acesso limitado ao próprio tenant
+- `admin` → gerencia usuários, produtos, categorias, clientes, fornecedores, estoque e presets de permissões do próprio tenant
+- `user` → acesso limitado ao próprio tenant, geralmente PDV e consultas
+
+## Endpoints principais
+
+Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticação via cookie, exceto `/auth/login` e `/auth/logout`.
+
+| Prefixo | O que faz |
+| --- | --- |
+| `/auth` | Login, logout e consulta de sessão |
+| `/users` | CRUD de usuários, roles e permissões |
+| `/permission-presets` | Presets reutilizáveis de permissões (globais ou por tenant) |
+| `/tenants` | Cadastro e gerenciamento de empresas |
+| `/categories` | Categorias de produtos |
+| `/products` | Produtos, estoque mínimo e alerta de baixo estoque (`/products/low-stock`) |
+| `/stock` | Movimentações de estoque (entrada/saída/ajuste) e alertas |
+| `/customers` | Cadastro de clientes (CPF/CNPJ único por tenant) |
+| `/suppliers` | Cadastro de fornecedores (CPF/CNPJ único por tenant) |
+| `/dashboard` | Dados resumidos do tenant |
+| `/audit` | Logs de auditoria |
 
 ## Segurança
 
@@ -119,4 +139,12 @@ O logout remove o cookie do navegador. Após sete dias, o JWT expira e um novo l
 - Logs de requisições em `logs/app.log`
 - Senhas nunca retornadas nas respostas (`select: false`)
 - Refresh token armazenado em cookie `HttpOnly` e `SameSite=Strict`
+- Blacklist de tokens revogados (hash SHA-256) com remoção automática via índice TTL
+- Troca de senha revoga todas as sessões anteriores do usuário (`passwordChangedAt`)
+- Permissões granulares por usuário: presets compartilháveis, permissões extras e revogações individuais
+- Catálogo de permissões centralizado (`resource:action`) com suporte a curingas
+- Categorias e produtos com SKU único por tenant, unidade de medida e estoque mínimo
+- Clientes e fornecedores com documento (CPF/CNPJ) validado e único por tenant
+- Movimentações de estoque registram histórico e impedem quantidade negativa
+- Soft delete e índices de unicidade parciais por tenant
 - Comentários explicativos padronizados no código

@@ -131,6 +131,9 @@ packages/web/
 - Sanitização de entradas contra NoSQL injection
 - Logs de requisições em arquivo (`packages/api/logs/app.log`)
 - Password oculto das respostas da API (`select: false` no Mongoose)
+- Revogação de sessões: blacklist de tokens no logout e invalidação automática ao trocar a senha
+- Permissões granulares com presets reutilizáveis, concessões extras e revogações individuais
+- Soft delete, isolamento por tenant e validações de CPF/CNPJ em clientes e fornecedores
 - Comentários explicativos padronizados no código, documentando funções e configurações
 
 ## Licença

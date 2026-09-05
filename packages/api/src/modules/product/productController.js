@@ -6,6 +6,7 @@ import {
     softDeleteProductService,
     hardDeleteProductService,
     restoreProductService,
+    getLowStockProductsService,
 } from "./productService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 import { ensureFound } from "../../shared/utils/controllerHelpers.js";
@@ -39,8 +40,8 @@ export const updateProduct = async (req, res) => {
 
 // Realiza soft delete de um produto do tenant atual.
 export const softDeleteProduct = async (req, res) => {
-    await softDeleteProductService(req.params.id, req.tenantId, req.user.id);
-    return successResponse(res, null, "Produto removido com sucesso");
+    const product = await softDeleteProductService(req.params.id, req.tenantId, req.user.id);
+    return successResponse(res, { product }, "Produto removido com sucesso");
 };
 
 // Realiza hard delete permanente de um produto. Restrito a master.
@@ -53,4 +54,10 @@ export const hardDeleteProduct = async (req, res) => {
 export const restoreProduct = async (req, res) => {
     const product = await restoreProductService(req.params.id, req.tenantId, req.user.id);
     return successResponse(res, { product }, "Produto restaurado com sucesso");
+};
+
+// Lista produtos com estoque abaixo do mínimo configurado.
+export const getLowStockProducts = async (req, res) => {
+    const result = await getLowStockProductsService(req.query, req.tenantId);
+    return successResponse(res, result, "Produtos com estoque baixo listados com sucesso");
 };

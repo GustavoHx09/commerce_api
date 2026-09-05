@@ -3,28 +3,63 @@ import {
     getProductsRepo,
     countProductsRepo,
     getProductByIdRepo,
+    getProductBySkuRepo,
     updateProductRepo,
     softDeleteProductRepo,
     restoreProductRepo,
     hardDeleteProductRepo,
 } from "./productRepo.js";
+import { getCategoryByIdRepo } from "../category/categoryRepo.js";
 import { isEmpty } from "../../shared/utils/fieldsValidations.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
-import {
-    sanitizeNumberFields,
-    throwValidationError,
-} from "../../shared/utils/serviceHelpers.js";
+import { sanitizeNumberFields, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
+// Unidades de medida aceitas para produtos.
+const VALID_UNITS = ["un", "kg", "g", "lt", "ml", "m", "cm", "par", "cx"];
+
 // Campos obrigatórios na criação de um produto.
-const requiredCreateFields = ["name", "price", "costPrice", "quantityInStock", "category"];
+const requiredCreateFields = ["name", "price", "sku", "unit", "categoryId"];
 
 // Campos numéricos que devem ser validados e convertidos.
-const numericFields = ["price", "costPrice", "quantityInStock"];
+const numericFields = ["price", "costPrice", "quantityInStock", "minStock"];
 
-// Garante que todos os campos obrigatórios estejam presentes na criação.
-const validateCreate = (data) => {
+// Normaliza a unidade de medida para minúsculas e valida o valor.
+const normalizeUnit = (unit) => {
+    const normalized = String(unit || "un").toLowerCase().trim();
+
+    if (!VALID_UNITS.includes(normalized)) {
+        throwValidationError(`Unidade inválida. Valores aceitos: ${VALID_UNITS.join(", ")}`);
+    }
+
+    return normalized;
+};
+
+// Garante que a categoria exista, pertença ao tenant e não esteja excluída.
+const validateCategory = async (categoryId, tenantId) => {
+    if (isEmpty(categoryId)) return;
+
+    const category = await getCategoryByIdRepo(categoryId, tenantId, false);
+
+    if (!category) {
+        throwValidationError("Categoria não encontrada", 404);
+    }
+};
+
+// Garante que o SKU seja único por tenant, considerando produtos ativos.
+const ensureSkuUnique = async (sku, tenantId, excludeId = null) => {
+    if (isEmpty(sku)) return;
+
+    const existing = await getProductBySkuRepo(String(sku).toUpperCase().trim(), tenantId);
+
+    if (existing && (!excludeId || existing._id.toString() !== excludeId.toString())) {
+        throwValidationError("SKU já cadastrado para este tenant", 409);
+    }
+};
+
+// Valida os dados obrigatórios e regras de negócio na criação de um produto.
+const validateCreate = async (data, tenantId) => {
     const missing = requiredCreateFields.filter((field) => isEmpty(data[field]));
 
     if (missing.length > 0) {
@@ -32,19 +67,40 @@ const validateCreate = (data) => {
     }
 
     sanitizeNumberFields(data, numericFields);
+    data.unit = normalizeUnit(data.unit);
+    data.sku = String(data.sku).toUpperCase().trim();
+
+    await validateCategory(data.categoryId, tenantId);
+    await ensureSkuUnique(data.sku, tenantId);
 };
 
 // Valida os campos enviados na atualização de um produto.
-const validateUpdate = (data) => {
-    const textFields = ["name", "description", "category"];
-
-    textFields.forEach((field) => {
-        if (data[field] === "") {
-            delete data[field];
-        }
-    });
+const validateUpdate = async (data, product, tenantId) => {
+    if (data.name === "") throwValidationError("O nome do produto é obrigatório");
+    if (data.sku === "") throwValidationError("O SKU do produto é obrigatório");
 
     sanitizeNumberFields(data, numericFields);
+
+    if (data.unit !== undefined) {
+        data.unit = normalizeUnit(data.unit);
+    }
+
+    if (data.sku !== undefined) {
+        data.sku = String(data.sku).toUpperCase().trim();
+    }
+
+    if (data.categoryId !== undefined) {
+        await validateCategory(data.categoryId, tenantId);
+    }
+
+    if (data.sku !== undefined) {
+        await ensureSkuUnique(data.sku, tenantId, product._id);
+    }
+
+    // Campos vazios de string não devem sobrescrever o documento.
+    ["name", "description"].forEach((field) => {
+        if (data[field] === "") delete data[field];
+    });
 
     if (Object.keys(data).length === 0) {
         throwValidationError("Nenhum campo válido para atualização");
@@ -53,7 +109,7 @@ const validateUpdate = (data) => {
 
 // Cria um novo produto vinculado ao tenant.
 export const createProductService = async (data, tenantId, actorId) => {
-    validateCreate(data);
+    await validateCreate(data, tenantId);
     data.tenantId = tenantId;
 
     const product = await createProductRepo(data);
@@ -70,8 +126,8 @@ export const getProductsService = async (query, tenantId, includeDeleted = false
 
     const filter = { ...baseQuery(tenantId, includeDeleted) };
 
-    if (query.category) {
-        filter.category = { $regex: query.category, $options: "i" };
+    if (query.categoryId) {
+        filter.categoryId = query.categoryId;
     }
 
     if (query.minPrice) {
@@ -82,11 +138,16 @@ export const getProductsService = async (query, tenantId, includeDeleted = false
         filter.price = { ...filter.price, $lte: Number(query.maxPrice) };
     }
 
+    if (query.minStockAlert) {
+        filter.$expr = { $lte: ["$quantityInStock", "$minStock"] };
+    }
+
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
             { name: { $regex: term, $options: "i" } },
             { description: { $regex: term, $options: "i" } },
+            { sku: { $regex: term, $options: "i" } },
         ];
     }
 
@@ -111,7 +172,7 @@ export const updateProductService = async (id, data, tenantId, actorId) => {
         throwValidationError("Produto não encontrado", 404);
     }
 
-    validateUpdate(data);
+    await validateUpdate(data, product, tenantId);
 
     const updatedProduct = await updateProductRepo(id, data, tenantId);
 
@@ -169,4 +230,9 @@ export const restoreProductService = async (id, tenantId, actorId) => {
     await auditAction("product", "restore", product, restoredProduct, actorId);
 
     return restoredProduct;
+};
+
+// Retorna produtos com estoque baixo (quantidade <= mínimo) do tenant.
+export const getLowStockProductsService = async (query, tenantId) => {
+    return getProductsService({ ...query, minStockAlert: "true" }, tenantId, false);
 };

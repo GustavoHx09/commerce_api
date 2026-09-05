@@ -3,6 +3,7 @@ import { appConfig } from "../config/appConfig.js";
 import users from "../../modules/user/userModel.js";
 import tenants from "../../modules/tenant/tenantModel.js";
 import { isTokenRevoked } from "../../modules/auth/authService.js";
+import { populateUserPermissionPreset } from "../utils/permissionHelpers.js";
 
 // Verifica o JWT, valida se o usuário ainda existe/está ativo e anexa os dados atualizados.
 export const authMiddleware = async (req, res, next) => {
@@ -32,6 +33,12 @@ export const authMiddleware = async (req, res, next) => {
             return res.status(401).json({ message: "Usuário inativo" });
         }
 
+        // Tokens emitidos antes da última troca de senha são considerados revogados.
+        // O iat do JWT é em segundos; compara com o timestamp da troca em segundos.
+        if (user.passwordChangedAt && decoded.iat <= Math.floor(user.passwordChangedAt.getTime() / 1000)) {
+            return res.status(401).json({ message: "Sessão revogada" });
+        }
+
         // Usuários vinculados a um tenant só acessam se o tenant estiver ativo.
         if (user.tenantId) {
             const tenant = await tenants.findOne({
@@ -51,7 +58,13 @@ export const authMiddleware = async (req, res, next) => {
             email: user.email,
             role: user.role,
             tenantId: user.tenantId?.toString?.() || null,
+            permissionPresetId: user.permissionPresetId?.toString?.() || null,
+            permissions: user.permissions || [],
+            revokedPermissions: user.revokedPermissions || [],
+            passwordChangedAt: user.passwordChangedAt || null,
         };
+
+        await populateUserPermissionPreset(req.user);
 
         next();
     } catch (error) {

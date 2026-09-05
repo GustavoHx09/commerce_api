@@ -6,6 +6,11 @@ import authRoutes from './modules/auth/authRoutes.js';
 import dashboardRoutes from './modules/dashboard/dashboardRoutes.js';
 import tenantsRoutes from './modules/tenant/tenantRoutes.js';
 import auditRoutes from './modules/audit/auditRoutes.js';
+import permissionPresetRoutes from './modules/permissionPreset/permissionPresetRoutes.js';
+import categoryRoutes from './modules/category/categoryRoutes.js';
+import stockRoutes from './modules/stock/stockRoutes.js';
+import customerRoutes from './modules/customer/customerRoutes.js';
+import supplierRoutes from './modules/supplier/supplierRoutes.js';
 
 // Roteador principal que agrupa todas as rotas da API.
 const router = Router();
@@ -16,5 +21,10 @@ router.use('/users', authMiddleware, userRoutes);
 router.use('/dashboard', authMiddleware, tenantMiddleware, dashboardRoutes);
 router.use('/tenants', tenantsRoutes);
 router.use('/audit', authMiddleware, auditRoutes);
+router.use('/permission-presets', authMiddleware, permissionPresetRoutes);
+router.use('/categories', authMiddleware, categoryRoutes);
+router.use('/stock', authMiddleware, stockRoutes);
+router.use('/customers', authMiddleware, customerRoutes);
+router.use('/suppliers', authMiddleware, supplierRoutes);
 
 export default router;

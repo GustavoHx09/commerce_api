@@ -8,6 +8,7 @@ import {
   getProduct,
   getProductById,
   restoreProduct,
+  getLowStockProducts,
 } from './productController.js';
 import { authMiddleware, isMaster, tenantMiddleware } from '../../shared/middlewares/authMiddleware.js';
 import { authorize } from '../../shared/middlewares/authorizeMiddleware.js';
@@ -23,5 +24,6 @@ router.put('/:id', authMiddleware, tenantMiddleware, validateObjectId(), authori
 router.put('/:id/restore', authMiddleware, tenantMiddleware, validateObjectId(), authorize('products', 'write'), asyncHandler(restoreProduct));
 router.delete('/:id', authMiddleware, tenantMiddleware, validateObjectId(), authorize('products', 'delete'), asyncHandler(softDeleteProduct));
 router.delete('/:id/hard', authMiddleware, isMaster, validateObjectId(), asyncHandler(hardDeleteProduct));
+router.get('/low-stock', authMiddleware, tenantMiddleware, authorize('stock', 'read'), asyncHandler(getLowStockProducts));
 
 export default router;

@@ -17,6 +17,8 @@ import { validateRequired, validateEnum, throwValidationError } from "../../shar
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { emailExists, cpfExists } from "./userValidations.js";
 import { auditAction } from "../audit/auditHelpers.js";
+import permissionPresets from "../permissionPreset/permissionPresetModel.js";
+import { SYSTEM_PERMISSIONS } from "../../shared/utils/permissionsCatalog.js";
 
 const addressFields = [
     "number",
@@ -43,16 +45,57 @@ const normalizeAddress = (address) => {
     return normalized;
 };
 
-// Valida o array de permissões customizadas, se fornecido.
-const validatePermissions = (permissions) => {
+// Valida o array de permissões contra o catálogo do sistema.
+const validatePermissionStringArray = (permissions, fieldName) => {
     if (permissions === undefined) return;
 
     if (!Array.isArray(permissions)) {
-        throwValidationError("permissions deve ser um array de strings", 422);
+        throwValidationError(`${fieldName} deve ser um array de strings`, 422);
     }
 
-    if (permissions.some((p) => typeof p !== "string" || p.trim() === "")) {
-        throwValidationError("permissions deve conter apenas strings não vazias", 422);
+    const invalid = permissions
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter((p) => !p || !SYSTEM_PERMISSIONS.includes(p));
+
+    if (invalid.length > 0) {
+        throwValidationError(`${fieldName} inválidas: ${invalid.join(", ")}`, 422);
+    }
+};
+
+// Garante que um preset, se informado, exista e possa ser usado pelo actor.
+const validatePermissionPreset = async (data, user, actor) => {
+    if (data.permissionPresetId === undefined) return;
+
+    const id = data.permissionPresetId;
+
+    if (!id || id === null) {
+        data.permissionPresetId = null;
+        return;
+    }
+
+    const preset = await permissionPresets
+        .findOne({ _id: id, deletedAt: null })
+        .select("tenantId")
+        .lean();
+
+    if (!preset) {
+        throwValidationError("Preset não encontrado", 404);
+    }
+
+    // Master pode vincular qualquer preset ativo.
+    if (actor.role === "master") return;
+
+    const presetTenantId = preset.tenantId?.toString?.() || null;
+    const actorTenantId = actor.tenantId?.toString?.() || null;
+
+    // Admin/user só usam presets do próprio tenant ou presets globais.
+    if (presetTenantId && presetTenantId !== actorTenantId) {
+        throwValidationError("Preset não pertence ao seu tenant", 403);
+    }
+
+    // Se estiver editando um usuário específico, o preset deve pertencer ao mesmo tenant do usuário.
+    if (user?.tenantId && presetTenantId && presetTenantId !== user.tenantId.toString()) {
+        throwValidationError("Preset não pertence ao tenant do usuário", 403);
     }
 };
 
@@ -74,6 +117,12 @@ const checkTenantCapacity = async (tenantId, excludeUserId = null) => {
     }
 
     return tenant;
+};
+
+// Limpa e deduplica uma lista de permissões.
+const sanitizePermissionArray = (permissions) => {
+    if (permissions === undefined) return undefined;
+    return [...new Set(permissions.map((p) => String(p).trim()).filter(Boolean))];
 };
 
 // Valida os dados obrigatórios e regras de negócio na criação de um usuário.
@@ -132,7 +181,12 @@ const validateCreate = async (data, actor) => {
         data.tenantId = null;
     }
 
-    validatePermissions(data.permissions);
+    validatePermissionStringArray(data.permissions, "permissions");
+    validatePermissionStringArray(data.revokedPermissions, "revokedPermissions");
+    await validatePermissionPreset(data, null, actor);
+
+    data.permissions = sanitizePermissionArray(data.permissions);
+    data.revokedPermissions = sanitizePermissionArray(data.revokedPermissions);
 
     data.address = normalizeAddress(data.address);
 
@@ -199,6 +253,8 @@ const validateUpdate = async (data, user, actor) => {
             delete data.password;
         } else {
             data.password = await bcrypt.hash(data.password, 10);
+            // Marca a troca de senha para revogar sessões emitidas antes desta data.
+            data.passwordChangedAt = new Date();
         }
     }
 
@@ -222,7 +278,12 @@ const validateUpdate = async (data, user, actor) => {
         await checkTenantCapacity(data.tenantId, user._id);
     }
 
-    validatePermissions(data.permissions);
+    validatePermissionStringArray(data.permissions, "permissions");
+    validatePermissionStringArray(data.revokedPermissions, "revokedPermissions");
+    await validatePermissionPreset(data, user, actor);
+
+    data.permissions = sanitizePermissionArray(data.permissions);
+    data.revokedPermissions = sanitizePermissionArray(data.revokedPermissions);
 
     if (data.address) {
         const currentAddress = user.address || {};

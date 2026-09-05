@@ -154,13 +154,75 @@ Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse 
 
 Objetivo: entregar a base operacional necessária para registrar produtos e relacionamentos comerciais.
 
-- Categorias.
-- Produtos com unidade, preço, SKU e estoque mínimo.
-- Movimentações e inventário de estoque.
-- Alertas de estoque baixo.
-- Clientes.
-- Fornecedores.
-- Paginação, filtros e índices para as consultas principais.
+- [x] Categorias.
+- [x] Produtos com unidade, preço, SKU e estoque mínimo.
+- [x] Movimentações e inventário de estoque.
+- [x] Alertas de estoque baixo.
+- [x] Clientes.
+- [x] Fornecedores.
+- [x] Paginação, filtros e índices para as consultas principais.
+- [x] Sistema de presets de permissões (backend concluído; painel do frontend na fase de UI).
+
+#### Fase 2.1 — Presets de permissões e painel de autorizações
+
+Objetivo: permitir que o admin de cada empresa gerencie as autorizações dos operadores por meio de presets reutilizáveis e ajustes individuais.
+
+**Modelo de dados**
+
+- Novo módulo `permissionPreset` seguindo a estrutura padrão (Model/Repo/Service/Controller/Routes/`__tests__`):
+  - `name` (obrigatório, ex: "Estoquista", "Vendedor"), `description`, `permissions: [String]` (formato `recurso:acao`), `tenantId`, `isActive`, `deletedAt`.
+  - `tenantId = null` → presets globais do sistema, criados e gerenciados apenas pelo `master`.
+  - `tenantId` preenchido → presets customizados do tenant, gerenciados pelo `admin` da empresa.
+  - Índice composto: nome único por tenant (`tenantId + name`), permitindo mesmo nome em tenants diferentes.
+- Alterações no `userModel`:
+  - `permissionPresetId`: referência ao preset vinculado (null = sem preset).
+  - `permissions`: passa a representar concessões **extras manuais** (aditivas sobre a base).
+  - `revokedPermissions: [String]`: revogações individuais, removendo permissões específicas da base.
+
+**Cálculo das permissões efetivas**
+
+```
+efetivas = (preset?.permissions ?? defaultRolePermissions[role])
+         ∪ permissions (extras manuais)
+         − revokedPermissions
+```
+
+- Alterar `getPermissions`/`hasPermission` em `permissionHelpers.js` para aplicar a fórmula acima.
+- O `authMiddleware` popula o preset do usuário ao montar `req.user` (1 join adicional por request autenticada).
+- **Atenção — mudança de semântica:** hoje `permissions` preenchido substitui as permissões da role; no novo modelo ele se torna aditivo. Como o campo ainda não é usado em produção, a migração é segura, mas deve ser documentada.
+
+**Endpoints (backend)**
+
+- `GET /permission-presets` → lista presets globais + do tenant do usuário (paginado, com soft delete respeitado).
+- `POST /permission-presets` → cria preset (admin cria no próprio tenant; master pode criar global ou de qualquer tenant).
+- `GET /permission-presets/:id`, `PUT /:id`, `DELETE /:id` (soft delete), `POST /:id/restore`.
+- `GET /permissions/available` → retorna o catálogo de permissões válidas do sistema (para montar os checkboxes do painel).
+- `PUT /users/:id` passa a aceitar `permissionPresetId`, `permissions` e `revokedPermissions` com validações:
+  - Preset deve existir, estar ativo e pertencer ao tenant do usuário (ou ser global).
+  - Permissões extras/revogadas devem existir no catálogo.
+  - `revokedPermissions` não pode conter permissão que não existe na base do usuário.
+- Operações de escrita registram `auditAction` (regra 10 do AGENTS.md).
+
+**Painel (frontend)**
+
+- Tela de gerenciamento de permissões por usuário, acessível ao admin (e master):
+  - Dropdown de presets disponíveis (globais + do tenant).
+  - Checkboxes de permissões agrupados por recurso, mostrando claramente a origem: herdada do preset, extra manual (badge "extra") ou revogada (badge "revogada").
+  - Ajuste individual sem desvincular o preset.
+- CRUD de presets do tenant: criar, editar nome/descrição/permissões, ativar/desativar.
+- Edição de preset propaga automaticamente para todos os usuários vinculados (característica do vínculo; exibir aviso na UI de quantos usuários serão afetados).
+
+**Testes obrigatórios (regra 9 do AGENTS.md)**
+
+- Cálculo de permissões efetivas: preset + extras − revogadas, fallback para defaults da role, `*` e `recurso:*`.
+- Isolamento: admin não acessa/edita preset de outro tenant; usuário não recebe preset de outro tenant.
+- Propagação: editar preset altera permissões efetivas dos vinculados.
+- Validações de criação/edição de preset e de atribuição ao usuário.
+
+**Documentação**
+
+- Atualizar `README.md` raiz e `packages/api/README.md` (endpoints e regra de permissões).
+- Atualizar `packages/web/README.md` com a nova tela.
 
 ### Fase 3 — Vendas, caixa, financeiro e gestão
 
@@ -272,7 +334,7 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 | Histórico de estoque | Coleção separada | Facilita auditoria e desempenho |
 | Itens do pedido | Embedded no pedido | Mantém leitura rápida e snapshot de preço |
 | Caixa | Um documento por abertura/fechamento | Representa corretamente cada turno |
-| Permissões | Roles com permissões explícitas | Permite começar simples sem perder controle granular |
+| Permissões | Roles + presets vinculados + ajustes individuais (extras/revogações) | Preset propaga mudanças para todos os vinculados; ajustes individuais preservam flexibilidade por operador |
 | Pagamentos da assinatura | Gateway externo | Reduz o tratamento direto de dados financeiros sensíveis |
 
 ## 9. Próximos passos imediatos

@@ -62,16 +62,35 @@ const usersSchema = new mongoose.Schema({
         default: null,
     },
 
+    // Preset de permissões vinculado. Mudar o preset afeta todos os usuários vinculados.
+    permissionPresetId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'permissionPresets',
+        default: null,
+    },
+
+    // Permissões extras manuais (aditivas sobre o preset ou role default).
+    permissions: {
+        type: [String],
+        default: [],
+    },
+
+    // Permissões revogadas individualmente (subtrativas).
+    revokedPermissions: {
+        type: [String],
+        default: [],
+    },
+
+    // Marca a última troca de senha. Tokens JWT emitidos antes desta data são revogados.
+    passwordChangedAt: {
+        type: Date,
+        default: null,
+    },
+
     // Indica se o usuário está ativo no sistema.
     isActive: {
         type: Boolean,
         default: true,
-    },
-
-    // Permissões customizadas. Se vazio, as permissões padrão da role são aplicadas.
-    permissions: {
-        type: [String],
-        default: [],
     },
 
     // Data de exclusão lógica (soft delete).
