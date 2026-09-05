@@ -1,4 +1,5 @@
-import { createAuditLogRepo } from "./auditRepo.js";
+import { createAuditLogRepo, getAuditLogsRepo, countAuditLogsRepo } from "./auditRepo.js";
+import { getPagination, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 
 // Campos sensíveis que nunca devem ser armazenados em logs de auditoria.
 const sensitiveFields = new Set(["password", "refreshToken", "accessToken"]);
@@ -66,4 +67,25 @@ export const createAuditLog = async ({ entityType, entityId, tenantId, action, a
         changes,
         snapshot: action === "delete" ? null : sanitizeData(next),
     });
+};
+
+// Lista os registros de auditoria respeitando o isolamento do tenant.
+export const getAuditLogsService = async (query, tenantId, isMaster) => {
+    const { page, limit, skip } = getPagination(query);
+
+    const filters = {
+        entityType: query.entityType,
+        entityId: query.entityId,
+        action: query.action,
+    };
+
+    // Master pode filtrar por outro tenant via query; outros usuários veem só o próprio.
+    filters.tenantId = isMaster && query.tenantId ? query.tenantId : tenantId;
+
+    const [logs, total] = await Promise.all([
+        getAuditLogsRepo(filters, skip, limit),
+        countAuditLogsRepo(filters),
+    ]);
+
+    return paginatedResponse(logs, page, limit, total);
 };

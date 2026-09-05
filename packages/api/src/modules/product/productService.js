@@ -5,6 +5,7 @@ import {
     getProductByIdRepo,
     updateProductRepo,
     softDeleteProductRepo,
+    restoreProductRepo,
     hardDeleteProductRepo,
 } from "./productRepo.js";
 import { isEmpty } from "../../shared/utils/fieldsValidations.js";
@@ -149,4 +150,23 @@ export const hardDeleteProductService = async (id, actor) => {
     await auditAction("product", "delete", product, null, actor.id);
 
     return await hardDeleteProductRepo(id);
+};
+
+// Restaura um produto excluído por soft delete. Restrito ao tenant.
+export const restoreProductService = async (id, tenantId, actorId) => {
+    const product = await getProductByIdRepo(id, tenantId, true);
+
+    if (!product) {
+        throwValidationError("Produto não encontrado", 404);
+    }
+
+    if (!product.deletedAt) {
+        throwValidationError("Produto não está removido", 400);
+    }
+
+    const restoredProduct = await restoreProductRepo(id, tenantId);
+
+    await auditAction("product", "restore", product, restoredProduct, actorId);
+
+    return restoredProduct;
 };

@@ -5,6 +5,7 @@ import {
     updateProductService,
     softDeleteProductService,
     hardDeleteProductService,
+    restoreProductService,
 } from "./productService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 import { ensureFound } from "../../shared/utils/controllerHelpers.js";
@@ -46,4 +47,10 @@ export const softDeleteProduct = async (req, res) => {
 export const hardDeleteProduct = async (req, res) => {
     await hardDeleteProductService(req.params.id, req.user);
     return successResponse(res, null, "Produto deletado permanentemente");
+};
+
+// Restaura um produto previamente removido por soft delete.
+export const restoreProduct = async (req, res) => {
+    const product = await restoreProductService(req.params.id, req.tenantId, req.user.id);
+    return successResponse(res, { product }, "Produto restaurado com sucesso");
 };

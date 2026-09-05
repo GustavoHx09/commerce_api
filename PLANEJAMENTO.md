@@ -4,9 +4,11 @@ Plano de evolução do sistema para atender comércios e varejos com arquitetura
 
 ## 1. Visão do produto
 
-Sistema de gestão comercial em nuvem, onde cada tenant representa uma empresa/comércio. Foco inicial no **varejo/comércio geral**, com possibilidade futura de atender supermercados e restaurantes.
+Sistema de gestão comercial em nuvem, oferecido como **SaaS B2B multitenancy**, onde cada tenant representa uma empresa/comércio. Foco inicial no **varejo/comércio geral**, com possibilidade futura de atender supermercados e restaurantes.
 
-O MVP deve permitir que uma loja controle **produtos, estoque, clientes, fornecedores, vendas e caixa** sem precisar emitir nota fiscal integrada.
+A aplicação funcionará **exclusivamente online** no MVP. Não haverá banco local nos computadores dos clientes nem sincronização offline; a disponibilidade será tratada na infraestrutura central com monitoramento, backups, recuperação e, conforme o crescimento, redundância.
+
+O MVP deve permitir que uma loja controle **produtos, estoque, clientes, fornecedores, vendas e caixa** sem precisar emitir nota fiscal integrada. O mesmo frontend atenderá todas as empresas e aplicará nome, logo e cores conforme a configuração do tenant, sem manter uma versão separada para cada cliente.
 
 ## 2. Arquitetura atual
 
@@ -129,74 +131,188 @@ Algumas mudanças estruturais são necessárias para suportar os novos módulos 
 - Contas bancárias e conciliação
 - API aberta para parceiros
 
-## 6. Roadmap sugerido
+## 6. Roadmap por prioridade
 
-### Fase 1 — Fundação (agora)
-- Ajustar isolamento de tenant
-- Adicionar audit trail
-- Refinar modelo de usuários e permissões
-- Criar módulo de empresas/tenants robusto
+A ordem abaixo separa o que é necessário para construir o produto, liberar clientes-piloto, comercializar com segurança e escalar. Itens de uma fase devem estar estáveis antes de avançar para a seguinte.
 
-### Fase 2 — Catálogo e estoque
-- Categorias
-- Produtos com unidade e estoque
-- Movimentações de estoque
-- Alertas de estoque baixo
+### Fase 1 — Fundação, isolamento e identidade da empresa (agora)
 
-### Fase 3 — Pessoas
-- Clientes
-- Fornecedores
+Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse dados de outra.
 
-### Fase 4 — Vendas e caixa
-- Pedidos/PDV
-- Formas de pagamento
-- Caixa (abertura/fechamento)
-- Dashboard de vendas
+- Ajustar e testar o isolamento obrigatório por `tenantId` em todas as consultas.
+- Criar módulo de empresas/tenants robusto, com CNPJ, endereço, status e configurações.
+- Usar um único frontend multitenancy, sem cópias personalizadas por cliente.
+- Permitir nome de exibição, logo e cores por tenant, com validação de formato e tamanho da imagem.
+- Armazenar logos em object storage; não aceitar CSS ou JavaScript fornecido pelo cliente.
+- Refinar usuários, roles e permissões granulares com menor privilégio.
+- Adicionar audit trail para operações sensíveis.
+- Padronizar soft delete e garantir preservação de histórico.
+- Reforçar autenticação, recuperação de senha, expiração e revogação de sessões.
+- Manter segredos fora do código e separar desenvolvimento, homologação e produção.
 
-### Fase 5 — Financeiro e relatórios
-- Contas a pagar/receber
-- Relatórios de vendas e estoque
-- Fluxo de caixa
+### Fase 2 — Catálogo, estoque e pessoas
 
-### Fase 6 — Hardening
-- Testes de integração
-- Validações robustas
-- Preparação para fiscal
+Objetivo: entregar a base operacional necessária para registrar produtos e relacionamentos comerciais.
 
-### Fase 7 — Integrações
-- Nota fiscal via parceiro
-- Meios de pagamento
-- APIs externas
+- Categorias.
+- Produtos com unidade, preço, SKU e estoque mínimo.
+- Movimentações e inventário de estoque.
+- Alertas de estoque baixo.
+- Clientes.
+- Fornecedores.
+- Paginação, filtros e índices para as consultas principais.
 
-## 7. Decisões técnicas pendentes
+### Fase 3 — Vendas, caixa, financeiro e gestão
 
-| Decisão | Opções | Recomendação |
+Objetivo: completar o fluxo principal que gera valor para o comércio.
+
+- Pedidos e PDV.
+- Formas de pagamento, sem armazenar dados sensíveis de cartão.
+- Reserva, baixa e estorno de estoque com operações consistentes.
+- Caixa com abertura, fechamento, sangria e reforço.
+- Dashboard de vendas.
+- Contas a pagar e receber.
+- Fluxo de caixa.
+- Relatórios de vendas e estoque.
+- Exportação dos dados essenciais da empresa.
+
+### Fase 4 — Segurança, qualidade e operação online
+
+Objetivo: preparar o sistema para receber clientes-piloto sem depender de banco local ou operação offline.
+
+- Testes unitários e de integração dos fluxos críticos.
+- Testes automatizados de autorização e isolamento entre tenants.
+- Validações equivalentes no frontend e no backend.
+- Proteções contra NoSQL injection, XSS, CSRF, brute force e uploads maliciosos.
+- HTTPS, cookies seguros, CORS restrito e headers de segurança.
+- Rate limiting por IP, usuário e tenant.
+- Logs centralizados sem senhas, tokens ou dados pessoais desnecessários.
+- Monitoramento de erros, latência, disponibilidade, CPU, memória, disco e conexões do banco.
+- Alertas para falhas críticas e indisponibilidade.
+- Banco gerenciado com backups automáticos, criptografia e recuperação point-in-time.
+- Teste documentado de restauração de backup.
+- Processo de deploy, rollback e migração de dados.
+- Testes de carga com cenários reais e correção de consultas lentas.
+- Definir RPO e RTO iniciais de acordo com custo e necessidade dos clientes-piloto.
+
+### Fase 5 — Preparação comercial e clientes-piloto
+
+Objetivo: validar produto, preço, operação e responsabilidades antes da venda em escala.
+
+- Selecionar poucos clientes-piloto do varejo/comércio geral.
+- Definir planos por empresa, usuários, armazenamento, funcionalidades e suporte.
+- Calcular custo por cliente considerando infraestrutura, terceiros, impostos, suporte e margem.
+- Definir onboarding, treinamento, migração, cancelamento e exportação de dados.
+- Definir o que está incluído no plano e quais serviços serão cobrados separadamente.
+- Criar contrato de prestação/licenciamento do SaaS, termos de uso e política de privacidade.
+- Criar regras de retenção, exclusão e tratamento de dados em conformidade com a LGPD.
+- Definir responsabilidades do fornecedor e do cliente, suporte e SLA quando aplicável.
+- Revisar licenças de bibliotecas, imagens, fontes, templates, APIs e serviços terceiros.
+- Validar CNPJ, CNAE, tributação e emissão de nota fiscal com contador.
+- Revisar documentos jurídicos com profissional especializado antes da comercialização.
+- Considerar pesquisa e registro da marca e registro do programa no INPI.
+- Usar gateway externo para cobranças; não processar nem armazenar cartões diretamente.
+- Coletar métricas e feedback dos pilotos antes do lançamento amplo.
+
+### Fase 6 — Escalabilidade e alta disponibilidade
+
+Objetivo: crescer com base em métricas reais sem adicionar complexidade prematuramente.
+
+- Medir requisições por segundo, picos simultâneos, latência e consumo por tenant.
+- Tornar a API stateless para executar duas ou mais instâncias atrás de load balancer.
+- Usar CDN para arquivos estáticos e object storage para uploads.
+- Adicionar cache somente onde as métricas demonstrarem benefício.
+- Processar e-mails, relatórios e tarefas pesadas em filas idempotentes.
+- Aplicar cotas e limites de concorrência por tenant para evitar consumo desproporcional.
+- Automatizar health checks, reinício de instâncias e deploy gradual.
+- Adotar réplica/standby do banco com failover automático quando o SLA e o volume justificarem.
+- Manter backups fora do ambiente principal e realizar testes periódicos de recuperação.
+- Criar plano de resposta a incidentes, continuidade e comunicação de indisponibilidade.
+- Avaliar infraestrutura ou banco dedicado apenas para clientes de grande porte.
+
+### Fase 7 — Integrações e expansão do produto
+
+Objetivo: ampliar o mercado somente após estabilizar o produto principal.
+
+- Nota fiscal via parceiro.
+- Meios de pagamento e maquininhas.
+- APIs externas e API para parceiros.
+- Múltiplas lojas/filiais.
+- Funcionalidades específicas para supermercados ou restaurantes.
+- E-commerce e catálogo online.
+
+## 7. Responsabilidades no modelo SaaS
+
+### Responsabilidade da plataforma
+
+- Hospedagem, banco de dados, atualizações, correções e monitoramento.
+- Segurança da aplicação e da infraestrutura sob seu controle.
+- Backups, restauração e disponibilidade conforme o plano contratado.
+- Isolamento dos tenants e controle de acesso.
+- Suporte, integrações e limites descritos no plano.
+- Tratamento adequado dos dados e gestão dos suboperadores contratados.
+
+### Responsabilidade do cliente
+
+- Internet, computadores, celulares, impressoras e rede interna.
+- Gestão dos próprios usuários, permissões e senhas.
+- Legalidade e qualidade dos dados, marcas e arquivos enviados.
+- Contas e custos de serviços externos que o contrato atribuir ao cliente.
+- Treinamento, migração ou personalização adicional quando não incluídos no plano.
+
+## 8. Decisões técnicas e de produto
+
+| Decisão | Escolha atual | Motivo |
 |---|---|---|
-| Banco de dados | MongoDB x PostgreSQL | Manter MongoDB no MVP por velocidade; avaliar PostgreSQL se dados fiscais exigirem relacional |
-| Histórico de estoque | Embedded array x coleção separada | Coleção separada para audit trail e performance |
-| Itens do pedido | Embedded x referência | Embedded no pedido para leitura rápida, com snapshot de preço |
-| Caixa | Um documento por turno x múltiplos | Um documento por abertura/fechamento |
-| Permissões | Hardcoded roles x matriz de permissões | Começar com roles + flags simples, evoluir para matriz |
+| Modelo de entrega | SaaS B2B exclusivamente online | Centraliza atualizações, segurança, backup e suporte |
+| Frontend por cliente | Um frontend multitenancy configurável | Evita duplicação e permite nome, logo e cores por empresa |
+| Banco local | Não usar no MVP | Sincronização offline adicionaria conflitos, riscos e complexidade desnecessários |
+| Banco principal | Manter MongoDB no MVP | Aproveita a arquitetura atual; reavaliar se necessidades fiscais/relacionais justificarem |
+| Disponibilidade do banco | Banco gerenciado, backup e point-in-time recovery antes dos pilotos | Backup é obrigatório para recuperação; réplica e failover entram conforme SLA e crescimento |
+| Histórico de estoque | Coleção separada | Facilita auditoria e desempenho |
+| Itens do pedido | Embedded no pedido | Mantém leitura rápida e snapshot de preço |
+| Caixa | Um documento por abertura/fechamento | Representa corretamente cada turno |
+| Permissões | Roles com permissões explícitas | Permite começar simples sem perder controle granular |
+| Pagamentos da assinatura | Gateway externo | Reduz o tratamento direto de dados financeiros sensíveis |
 
-## 8. Próximos passos imediatos
+## 9. Próximos passos imediatos
 
-1. Implementar módulo de empresas/tenants com validações de CNPJ e endereço.
-2. Adicionar audit trail nas operações de criação/alteração/exclusão.
-3. Criar módulo de categorias.
-4. Refatorar o módulo de produtos para suportar unidade, estoque mínimo e categorias.
-5. Criar módulo de movimentação de estoque.
-6. Criar módulo de clientes.
-7. Criar módulo de vendas (pedidos + itens).
-8. Implementar controle de caixa básico.
+1. Auditar e testar o isolamento por `tenantId` em todos os módulos existentes.
+2. Implementar módulo de empresas/tenants com CNPJ, endereço, nome, logo, cores e status.
+3. Adicionar audit trail nas operações de criação, alteração e exclusão.
+4. Refinar usuários, recuperação de senha, sessões, roles e permissões.
+5. Criar módulo de categorias.
+6. Refatorar produtos para suportar unidade, estoque mínimo, categorias, paginação e índices.
+7. Criar movimentações de estoque.
+8. Criar clientes e fornecedores.
+9. Criar vendas, pedidos e itens com consistência de estoque.
+10. Implementar caixa, dashboard, financeiro básico e relatórios.
+11. Executar a Fase 4 completa antes de liberar clientes-piloto.
+12. Concluir as definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
-## 9. O que ficará de fora do MVP de propósito
+## 10. Critérios mínimos para liberar clientes-piloto
 
-- Emissão de nota fiscal própria
-- Múltiplas filiais
-- E-commerce
-- App mobile
-- Integração bancária
-- Controle de lotes e validade
-- Comandas e mesas
+- Fluxos principais do MVP concluídos e testados.
+- Isolamento entre tenants coberto por testes automatizados.
+- Autenticação, permissões e audit trail funcionando.
+- Backup automático e restauração testada.
+- Monitoramento e alertas ativos.
+- Deploy e rollback documentados e testados.
+- Exportação e exclusão de dados definidas.
+- Termos, privacidade, contrato e responsabilidades revisados.
+- Suporte, preço, limites do plano e processo de cancelamento definidos.
 
-Isso mantém o escopo enxuto e permite lançar mais rápido.
+## 11. O que ficará de fora do MVP de propósito
+
+- Funcionamento offline, banco local e sincronização entre dispositivos.
+- Emissão de nota fiscal própria.
+- Múltiplas filiais.
+- E-commerce.
+- App mobile.
+- Integração bancária.
+- Controle de lotes e validade.
+- Comandas e mesas.
+- Infraestrutura dedicada por cliente.
+- Certificações como ISO 27001 ou SOC 2, salvo exigência comercial concreta.
+
+Isso mantém o escopo enxuto, prioriza segurança e operação confiável e permite lançar mais rápido sem antecipar complexidade de escala.

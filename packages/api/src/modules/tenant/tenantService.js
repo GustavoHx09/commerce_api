@@ -7,15 +7,35 @@ import {
     getTenantByDocumentRepo,
     updateTenantRepo,
     softDeleteTenantRepo,
+    restoreTenantRepo,
 } from "./tenantRepo.js";
 import { isEmpty, isValid, generateSlug, isValidDocument, isValidPhone, cepIsValid, emailIsValid, formatDocument } from "../../shared/utils/fieldsValidations.js";
 import { throwValidationError, validateRequired } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
+import { saveLogoFile } from "../../shared/utils/upload/storageService.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
 const addressFields = ["number", "street", "neighborhood", "zipCode", "complement", "city", "state"];
 
 const planLimits = { free: 2, basic: 10, pro: 100 };
+
+// Campos que a própria empresa pode alterar através de /tenants/me.
+const ownTenantEditableFields = ["name", "displayName", "phone", "email", "address", "logoUrl", "colors"];
+
+// Valida uma cor no formato hexadecimal de 6 dígitos.
+const isValidHexColor = (color) => {
+    if (isEmpty(color)) return false;
+    return /^#[0-9A-Fa-f]{6}$/.test(color);
+};
+
+// Valida se a URL do logo aponta para uma imagem segura.
+const isValidLogoUrl = (url) => {
+    if (isEmpty(url)) return true; // opcional
+    if (typeof url !== "string") return false;
+    const safeImageRegex = /\.(png|jpg|jpeg|svg|webp)(\?.*)?$/i;
+    const safeProtocol = /^https?:\/\//i;
+    return safeProtocol.test(url) && safeImageRegex.test(url);
+};
 
 // Normaliza o objeto de endereço, convertendo campos vazios em null.
 const normalizeAddress = (address) => {
@@ -189,4 +209,91 @@ export const deleteTenantService = async (id, actorId) => {
     await auditAction("tenant", "delete", tenant, deletedTenant, actorId);
 
     return deletedTenant;
+};
+
+// Remove campos que a própria empresa não pode alterar.
+const filterOwnTenantData = (data) => {
+    const filtered = {};
+
+    for (const field of ownTenantEditableFields) {
+        if (data[field] !== undefined) {
+            filtered[field] = data[field];
+        }
+    }
+
+    return filtered;
+};
+
+// Valida os dados de branding e contato permitidos para edição própria.
+const validateOwnTenantData = (data) => {
+    if (data.displayName !== undefined && !isEmpty(data.displayName) && data.displayName.length > 120) {
+        throwValidationError("Nome de exibição deve ter no máximo 120 caracteres", 422);
+    }
+
+    if (data.colors !== undefined) {
+        if (data.colors.primary !== undefined && !isValidHexColor(data.colors.primary)) {
+            throwValidationError("Cor primária inválida. Use formato hexadecimal como #2563eb", 422);
+        }
+
+        if (data.colors.secondary !== undefined && !isValidHexColor(data.colors.secondary)) {
+            throwValidationError("Cor secundária inválida. Use formato hexadecimal como #1e40af", 422);
+        }
+    }
+
+    if (data.logoUrl !== undefined && !isValidLogoUrl(data.logoUrl)) {
+        throwValidationError("URL do logo inválida. Deve ser uma imagem (png, jpg, svg, webp) em http/https", 422);
+    }
+};
+
+// Atualiza os dados da própria empresa, impedindo mudanças em plano, documento e status.
+export const updateOwnTenantService = async (id, data, actorId) => {
+    const filtered = filterOwnTenantData(data);
+    validateOwnTenantData(filtered);
+
+    if (Object.keys(filtered).length === 0) {
+        throwValidationError("Nenhum campo válido para atualização");
+    }
+
+    return await updateTenantService(id, filtered, actorId);
+};
+
+// Restaura um tenant previamente excluído por soft delete. Restrito a master.
+export const restoreTenantService = async (id, actorId) => {
+    const tenant = await getTenantByIdRepo(id, true);
+
+    if (!tenant) {
+        throwValidationError("Tenant não encontrado", 404);
+    }
+
+    if (!tenant.deletedAt) {
+        throwValidationError("Tenant não está removido", 400);
+    }
+
+    const restoredTenant = await restoreTenantRepo(id);
+
+    await auditAction("tenant", "restore", tenant, restoredTenant, actorId);
+
+    return restoredTenant;
+};
+
+// Faz upload da logo da empresa, salva em disco e atualiza o tenant.
+export const uploadTenantLogoService = async (id, file, baseUrl, actorId) => {
+    if (!file) {
+        throwValidationError("Nenhuma imagem enviada");
+    }
+
+    const { relativePath } = saveLogoFile(id, file.buffer, file.mimetype);
+    const logoUrl = `${baseUrl}/${relativePath}`;
+
+    const tenant = await getTenantByIdRepo(id);
+
+    if (!tenant) {
+        throwValidationError("Tenant não encontrado", 404);
+    }
+
+    const updatedTenant = await updateTenantRepo(id, { logoUrl });
+
+    await auditAction("tenant", "update", tenant, updatedTenant, actorId);
+
+    return updatedTenant;
 };

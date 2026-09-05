@@ -1,8 +1,11 @@
 import jwt from "jsonwebtoken";
 import { appConfig } from "../config/appConfig.js";
+import users from "../../modules/user/userModel.js";
+import tenants from "../../modules/tenant/tenantModel.js";
+import { isTokenRevoked } from "../../modules/auth/authService.js";
 
-// Verifica o JWT armazenado no cookie HttpOnly e anexa seus dados na requisição.
-export const authMiddleware = (req, res, next) => {
+// Verifica o JWT, valida se o usuário ainda existe/está ativo e anexa os dados atualizados.
+export const authMiddleware = async (req, res, next) => {
     const token = req.cookies?.authToken;
 
     if (!token) {
@@ -11,10 +14,52 @@ export const authMiddleware = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, appConfig.jwtSecret);
-        req.user = decoded;
+
+        const revoked = await isTokenRevoked(token);
+        if (revoked) {
+            return res.status(401).json({ message: "Sessão revogada" });
+        }
+
+        const user = await users
+            .findOne({ _id: decoded.id, deletedAt: null })
+            .select("-password");
+
+        if (!user) {
+            return res.status(401).json({ message: "Usuário não encontrado" });
+        }
+
+        if (!user.isActive) {
+            return res.status(401).json({ message: "Usuário inativo" });
+        }
+
+        // Usuários vinculados a um tenant só acessam se o tenant estiver ativo.
+        if (user.tenantId) {
+            const tenant = await tenants.findOne({
+                _id: user.tenantId,
+                isActive: true,
+                deletedAt: null,
+            });
+
+            if (!tenant) {
+                return res.status(403).json({ message: "Empresa inativa ou removida" });
+            }
+        }
+
+        req.user = {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            tenantId: user.tenantId?.toString?.() || null,
+        };
+
         next();
-    } catch {
-        return res.status(401).json({ message: "Token inválido" });
+    } catch (error) {
+        if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+            return res.status(401).json({ message: "Token inválido ou expirado" });
+        }
+
+        return res.status(500).json({ message: "Erro ao validar sessão" });
     }
 };
 

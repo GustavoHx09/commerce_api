@@ -40,6 +40,15 @@ export const softDeleteUserRepo = (id, tenantId) => {
     );
 };
 
+// Restaura um usuário previamente excluído por soft delete.
+export const restoreUserRepo = (id, tenantId) => {
+    return users.findOneAndUpdate(
+        { _id: id, ...baseQuery(tenantId, true) },
+        { deletedAt: null },
+        { new: true }
+    );
+};
+
 // Remove permanentemente um usuário do banco de dados.
 export const hardDeleteUserRepo = (id) => {
     return users.findByIdAndDelete(id);

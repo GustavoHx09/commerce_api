@@ -16,8 +16,20 @@ interface User {
   tenantId: string | null;
 }
 
+interface Tenant {
+  _id: string;
+  name: string;
+  displayName?: string;
+  logoUrl?: string;
+  colors?: {
+    primary?: string;
+    secondary?: string;
+  };
+}
+
 interface AuthContextData {
   user: User | null;
+  tenant: Tenant | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -27,7 +39,22 @@ const AuthContext = createContext<AuthContextData | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const fetchTenant = async (tenantId: string | null) => {
+    if (!tenantId) {
+      setTenant(null);
+      return;
+    }
+
+    try {
+      const response = await api.get('/tenants/me');
+      setTenant(response.data.data.tenant);
+    } catch {
+      setTenant(null);
+    }
+  };
 
   useEffect(() => {
     // Restaura a sessão porque o cookie HttpOnly não pode ser lido pelo JavaScript.
@@ -35,8 +62,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const response = await api.get('/auth/session');
         setUser(response.data.data.user);
+        await fetchTenant(response.data.data.user.tenantId);
       } catch {
         setUser(null);
+        setTenant(null);
       } finally {
         setIsLoading(false);
       }
@@ -49,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const response = await api.post('/auth/login', { email, password });
     setUser(response.data.data.user);
+    await fetchTenant(response.data.data.user.tenantId);
   };
 
   // O backend remove o cookie; o estado local é limpo mesmo se a chamada falhar.
@@ -57,11 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await api.post('/auth/logout');
     } finally {
       setUser(null);
+      setTenant(null);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, tenant, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

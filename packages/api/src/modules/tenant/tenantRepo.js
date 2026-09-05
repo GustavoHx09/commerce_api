@@ -34,5 +34,10 @@ export const softDeleteTenantRepo = (id) => {
     return tenants.findByIdAndUpdate(id, { deletedAt: new Date(), isActive: false }, { new: true });
 };
 
+// Restaura um tenant previamente excluído por soft delete.
+export const restoreTenantRepo = (id) => {
+    return tenants.findByIdAndUpdate(id, { deletedAt: null, isActive: true }, { new: true });
+};
+
 // Remove permanentemente um tenant do banco de dados.
 export const deleteTenantRepo = (id) => tenants.findByIdAndDelete(id);

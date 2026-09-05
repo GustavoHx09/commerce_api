@@ -35,6 +35,15 @@ export const softDeleteProductRepo = (id, tenantId) => {
     );
 };
 
+// Restaura um produto previamente excluído por soft delete.
+export const restoreProductRepo = (id, tenantId) => {
+    return products.findOneAndUpdate(
+        { _id: id, ...baseQuery(tenantId, true) },
+        { deletedAt: null },
+        { new: true }
+    );
+};
+
 // Remove permanentemente um produto do banco de dados.
 export const hardDeleteProductRepo = (id) => {
     return products.findByIdAndDelete(id);

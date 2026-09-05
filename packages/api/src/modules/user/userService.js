@@ -8,6 +8,7 @@ import {
     getUserByIdWithPasswordRepo,
     updateUserRepo,
     softDeleteUserRepo,
+    restoreUserRepo,
     hardDeleteUserRepo,
 } from "./userRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
@@ -362,4 +363,23 @@ export const hardDeleteUserService = async (id, actor) => {
     await auditAction("user", "delete", user, null, actor.id);
 
     return await hardDeleteUserRepo(id);
+};
+
+// Restaura um usuário excluído por soft delete. Restrito ao tenant.
+export const restoreUserService = async (id, actor) => {
+    const user = await getUserByIdRepo(id, actor.tenantId, true);
+
+    if (!user) {
+        throwValidationError("Usuário não encontrado", 404);
+    }
+
+    if (!user.deletedAt) {
+        throwValidationError("Usuário não está removido", 400);
+    }
+
+    const restoredUser = await restoreUserRepo(id, actor.tenantId);
+
+    await auditAction("user", "restore", user, restoredUser, actor.id);
+
+    return restoredUser;
 };

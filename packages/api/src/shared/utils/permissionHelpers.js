@@ -5,7 +5,7 @@ const defaultRolePermissions = {
     master: ["*"], // master pode tudo
     admin: [
         "dashboard:read",
-        "tenant:read",
+        "tenant:read", "tenant:write",
         "users:read", "users:write", "users:delete",
         "products:read", "products:write", "products:delete",
         "categories:read", "categories:write", "categories:delete",
@@ -14,9 +14,11 @@ const defaultRolePermissions = {
         "orders:read", "orders:write", "orders:delete",
         "cashier:read", "cashier:write",
         "reports:read",
+        "audit:read",
     ],
     user: [
         "dashboard:read",
+        "tenant:read",
         "products:read", "products:write",
         "customers:read", "customers:write",
         "orders:read", "orders:write",

@@ -7,6 +7,7 @@ import {
   updateUser,
   softDeleteUser,
   hardDeleteUser,
+  restoreUser,
 } from './userController.js';
 import { authMiddleware, isMaster, tenantMiddleware } from '../../shared/middlewares/authMiddleware.js';
 import { authorize } from '../../shared/middlewares/authorizeMiddleware.js';
@@ -19,6 +20,7 @@ router.get('/', authMiddleware, tenantMiddleware, authorize('users', 'read'), as
 router.post('/', authMiddleware, tenantMiddleware, authorize('users', 'write'), asyncHandler(createUser));
 router.get('/:id', authMiddleware, tenantMiddleware, validateObjectId(), authorize('users', 'read'), asyncHandler(getUserById));
 router.put('/:id', authMiddleware, tenantMiddleware, validateObjectId(), authorize('users', 'write'), asyncHandler(updateUser));
+router.put('/:id/restore', authMiddleware, tenantMiddleware, validateObjectId(), authorize('users', 'write'), asyncHandler(restoreUser));
 router.delete('/:id', authMiddleware, tenantMiddleware, validateObjectId(), authorize('users', 'delete'), asyncHandler(softDeleteUser));
 router.delete('/:id/hard', authMiddleware, isMaster, validateObjectId(), asyncHandler(hardDeleteUser));
 

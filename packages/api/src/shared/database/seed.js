@@ -8,9 +8,24 @@ import products from "../../modules/product/productModel.js";
 // Carrega as variáveis de ambiente antes de conectar ao banco.
 dotenv.config();
 
+// Senhas do seed devem vir obrigatoriamente do .env; nunca ficam no código.
+const getSeedPassword = (varName) => {
+    const value = process.env[varName];
+    if (!value) {
+        throw new Error(`Variável de ambiente ${varName} é obrigatória para o seed`);
+    }
+    return value;
+};
+
+const getSeedEmail = (varName, defaultValue) => process.env[varName] || defaultValue;
+
 // Popula o banco com dados iniciais para desenvolvimento e testes.
 async function seed() {
   try {
+    if (!process.env.MONGO_URI) {
+        throw new Error("MONGO_URI não definida no .env");
+    }
+
     await mongoose.connect(process.env.MONGO_URI);
     console.log("Conectado ao banco");
 
@@ -40,16 +55,16 @@ async function seed() {
       isActive: true,
     });
 
-    // Senhas padrão que podem ser sobrescritas por variáveis de ambiente.
-    const masterPassword = process.env.MASTER_PASSWORD || "master123";
-    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-    const userPassword = process.env.USER_PASSWORD || "user123";
+    // Senhas do seed lidas obrigatoriamente do .env.
+    const masterPassword = getSeedPassword("MASTER_PASSWORD");
+    const adminPassword = getSeedPassword("ADMIN_PASSWORD");
+    const userPassword = getSeedPassword("USER_PASSWORD");
 
     // Usuários iniciais com diferentes papéis para testar a aplicação.
     const usersData = [
       {
         name: "Master Admin",
-        email: process.env.MASTER_EMAIL || "master@admin.com",
+        email: getSeedEmail("MASTER_EMAIL", "master@admin.com"),
         cpf: "52998224725",
         phone: "11999999999",
         address: {
@@ -66,7 +81,7 @@ async function seed() {
       },
       {
         name: "Admin Exemplo",
-        email: process.env.ADMIN_EMAIL || "admin@lojaexemplo.com",
+        email: getSeedEmail("ADMIN_EMAIL", "admin@lojaexemplo.com"),
         cpf: "13651813169",
         phone: "11988888888",
         address: {
@@ -83,7 +98,7 @@ async function seed() {
       },
       {
         name: "Usuário Exemplo",
-        email: process.env.USER_EMAIL || "user@lojaexemplo.com",
+        email: getSeedEmail("USER_EMAIL", "user@lojaexemplo.com"),
         cpf: "95396167866",
         phone: "11977777777",
         address: {

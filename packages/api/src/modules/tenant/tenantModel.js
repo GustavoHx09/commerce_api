@@ -63,10 +63,23 @@ const tenantsSchema = new mongoose.Schema({
         default: {},
     },
 
-    // URL do logotipo da empresa.
+    // Nome de exibição curto para o frontend. Se vazio, usa o campo name.
+    displayName: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+
+    // URL do logotipo da empresa. Deve apontar para imagem segura (png, jpg, svg, webp).
     logoUrl: {
         type: String,
         trim: true,
+    },
+
+    // Cores da marca, definidas pelo servidor. Não aceita CSS/JavaScript do cliente.
+    colors: {
+        primary: { type: String, default: "#2563eb" },
+        secondary: { type: String, default: "#1e40af" },
     },
 
     // Configurações internas da empresa. Não retornado por padrão.

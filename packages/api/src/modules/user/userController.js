@@ -5,6 +5,7 @@ import {
     updateUserService,
     softDeleteUserService,
     hardDeleteUserService,
+    restoreUserService,
 } from "./userService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 import { ensureFound } from "../../shared/utils/controllerHelpers.js";
@@ -46,4 +47,10 @@ export const softDeleteUser = async (req, res) => {
 export const hardDeleteUser = async (req, res) => {
     await hardDeleteUserService(req.params.id, req.user);
     return successResponse(res, null, "Usuário deletado permanentemente");
+};
+
+// Restaura um usuário previamente removido por soft delete.
+export const restoreUser = async (req, res) => {
+    const user = await restoreUserService(req.params.id, req.user);
+    return successResponse(res, { user }, "Usuário restaurado com sucesso");
 };

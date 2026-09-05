@@ -32,7 +32,11 @@ app.use(cookieParser());          // Habilita leitura de cookies nas requisiçõ
 app.use(requestLogger);           // Salva logs de requisições em arquivo.
 app.use(requestLoggerConsole);    // Exibe logs de requisições no console em dev.
 app.use(express.json());          // Converte o body das requisições para JSON.
+app.use(express.urlencoded({ extended: true })); // Habilita parsing de formulários com upload.
 app.use(sanitizeMiddleware);        // Remove caracteres proibidos para evitar NoSQL injection.
+
+// Serve arquivos estáticos de upload (logos). Em produção deve virar object storage.
+app.use("/uploads", express.static("uploads"));
 
 // Registra as rotas da API.
 app.use("/api/v1", routes);

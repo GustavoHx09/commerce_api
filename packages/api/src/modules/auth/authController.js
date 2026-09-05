@@ -1,4 +1,4 @@
-import { authenticateUser } from "./authService.js";
+import { authenticateUser, revokeToken } from "./authService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 
 // Nome do cookie HttpOnly que mantém a sessão autenticada no navegador.
@@ -32,8 +32,18 @@ export const getSession = async (req, res) => {
     }, "Sessão autenticada");
 };
 
-// Encerra a sessão removendo o JWT do navegador.
-export const logout = async (_req, res) => {
+// Encerra a sessão removendo o JWT do navegador e adicionando à blacklist.
+export const logout = async (req, res) => {
+    const token = req.cookies?.authToken;
+
+    if (token) {
+        try {
+            await revokeToken(token);
+        } catch {
+            // Ignora tokens inválidos/expirados; mesmo assim limpa o cookie.
+        }
+    }
+
     res.clearCookie(AUTH_COOKIE, getAuthCookieOptions(false));
 
     return successResponse(res, null, "Logout realizado com sucesso");
