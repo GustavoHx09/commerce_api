@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import users from "../../modules/user/userModel.js";
 import tenants from "../../modules/tenant/tenantModel.js";
+import categories from "../../modules/category/categoryModel.js";
 import products from "../../modules/product/productModel.js";
 
 // Carrega as variáveis de ambiente antes de conectar ao banco.
@@ -32,6 +33,7 @@ async function seed() {
     // Limpa as coleções antes de inserir os dados iniciais.
     await users.deleteMany();
     await tenants.deleteMany();
+    await categories.deleteMany();
     await products.deleteMany();
 
     // Cria o tenant de exemplo com dados comerciais completos.
@@ -117,16 +119,27 @@ async function seed() {
 
     const createdUsers = await users.insertMany(usersData);
 
+    // Categoria de exemplo para vincular aos produtos.
+    const category = await categories.create({
+      tenantId: tenant._id,
+      name: "Eletrônicos",
+      isActive: true,
+    });
+
     // Produtos iniciais de exemplo vinculados ao tenant.
     const productsData = [
       {
         tenantId: tenant._id,
         name: "Notebook",
         description: "Notebook gamer",
+        sku: "NB-001",
+        unit: "un",
         price: 5000,
         costPrice: 3500,
         quantityInStock: 10,
-        category: "eletronico",
+        minStock: 2,
+        categoryId: category._id,
+        isActive: true,
       },
     ];
 

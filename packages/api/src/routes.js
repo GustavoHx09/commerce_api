@@ -11,6 +11,9 @@ import categoryRoutes from './modules/category/categoryRoutes.js';
 import stockRoutes from './modules/stock/stockRoutes.js';
 import customerRoutes from './modules/customer/customerRoutes.js';
 import supplierRoutes from './modules/supplier/supplierRoutes.js';
+import cashierRoutes from './modules/cashier/cashierRoutes.js';
+import orderRoutes from './modules/order/orderRoutes.js';
+import paymentRoutes from './modules/payment/paymentRoutes.js';
 
 // Roteador principal que agrupa todas as rotas da API.
 const router = Router();
@@ -26,5 +29,8 @@ router.use('/categories', authMiddleware, categoryRoutes);
 router.use('/stock', authMiddleware, stockRoutes);
 router.use('/customers', authMiddleware, customerRoutes);
 router.use('/suppliers', authMiddleware, supplierRoutes);
+router.use('/cashiers', authMiddleware, cashierRoutes);
+router.use('/orders', authMiddleware, orderRoutes);
+router.use('/payments', authMiddleware, paymentRoutes);
 
 export default router;

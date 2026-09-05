@@ -9,7 +9,8 @@ export const toPlain = (doc) => {
 };
 
 // Cria um registro de auditoria padronizado para services.
-export const auditAction = async (entityType, action, previous, next, actorId) => {
+// Aceita uma sessão do Mongoose opcional para inclusão em transações.
+export const auditAction = async (entityType, action, previous, next, actorId, { session } = {}) => {
     return await createAuditLog({
         entityType,
         entityId: next?._id || previous?._id,
@@ -18,5 +19,5 @@ export const auditAction = async (entityType, action, previous, next, actorId) =
         actorId,
         previous: toPlain(previous),
         next: toPlain(next),
-    });
+    }, { session });
 };

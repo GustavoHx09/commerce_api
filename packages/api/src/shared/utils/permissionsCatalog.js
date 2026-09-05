@@ -29,6 +29,8 @@ export const SYSTEM_PERMISSIONS = [
     "orders:delete",
     "cashier:read",
     "cashier:write",
+    "cashier:delete",
+    "payments:read",
     "reports:read",
     "audit:read",
 ];

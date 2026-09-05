@@ -108,3 +108,10 @@ modules/<nome>/
 
 - Ao adicionar rota, módulo, variável de ambiente ou mudança de comportamento, atualize os READMEs afetados (`README.md` raiz, `packages/api/README.md`, `packages/web/README.md`).
 - Marque as fases concluídas no `PLANEJAMENTO.md` conforme o progresso.
+
+## 13. Transações MongoDB
+
+- Use o helper `withTransaction` em operações que precisam ser atômicas (vendas, cancelamentos, ajustes de estoque + financeiro).
+- Sempre repasse a `session` do Mongoose para repositories e `auditAction` envolvidos na mesma transação.
+- Transações exigem um replica set. Em produção use MongoDB Atlas. Para desenvolvimento local, inicie `mongod` com `--replSet rs0` e execute `rs.initiate()` uma vez.
+- O helper pode cair para execução sem transação em ambientes sem replica set, emitindo um aviso. Não desative esse comportamento em produção.

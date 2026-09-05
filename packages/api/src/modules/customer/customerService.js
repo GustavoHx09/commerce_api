@@ -13,6 +13,7 @@ import { isValidDocument, formatDocument, isValidPhone, emailIsValid, cepIsValid
 import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
+import { countOrdersByCustomerRepo } from "../order/orderRepo.js";
 
 // Padroniza e valida um documento CPF/CNPJ.
 const validateDocument = (document, type) => {
@@ -217,6 +218,12 @@ export const hardDeleteCustomerService = async (id, actor) => {
 
     if (!customer) {
         throwValidationError("Cliente não encontrado", 404);
+    }
+
+    const hasOrders = await countOrdersByCustomerRepo(id);
+
+    if (hasOrders > 0) {
+        throwValidationError("Não é possível excluir permanentemente um cliente com histórico de vendas", 409);
     }
 
     await auditAction("customer", "delete", customer, null, actor.id);

@@ -52,7 +52,8 @@ const buildChanges = (action, previous, next) => {
 };
 
 // Cria uma entrada de auditoria centralizada.
-export const createAuditLog = async ({ entityType, entityId, tenantId, action, actorId, previous, next }) => {
+// Aceita uma sessão do Mongoose opcional para inclusão em transações.
+export const createAuditLog = async ({ entityType, entityId, tenantId, action, actorId, previous, next }, { session } = {}) => {
     const changes = buildChanges(action, previous, next);
 
     // Evita salvar logs de update sem mudanças reais.
@@ -66,7 +67,7 @@ export const createAuditLog = async ({ entityType, entityId, tenantId, action, a
         actorId,
         changes,
         snapshot: action === "delete" ? null : sanitizeData(next),
-    });
+    }, { session });
 };
 
 // Lista os registros de auditoria respeitando o isolamento do tenant.

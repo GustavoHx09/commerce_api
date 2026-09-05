@@ -1,7 +1,11 @@
 import audit from "./auditModel.js";
 
 // Cria um registro de auditoria no banco de dados.
-export const createAuditLogRepo = (data) => audit.create(data);
+// Aceita uma sessão do Mongoose opcional para inclusão em transações.
+export const createAuditLogRepo = async (data, { session } = {}) => {
+    const [created] = await audit.create([data], { session });
+    return created;
+};
 
 // Monta o filtro de consulta de auditoria, opcionalmente por entidade, tenant e ação.
 const buildFilter = ({ entityType, entityId, tenantId, action }) => {

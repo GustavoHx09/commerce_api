@@ -18,6 +18,7 @@ O MVP deve permitir que uma loja controle **produtos, estoque, clientes, fornece
 - Multitenancy: campo `tenantId` nos documentos
 - Roles: `master`, `admin`, `user`
 - Permissões granulares: roles + presets vinculáveis + permissões extras/revogações individuais
+- PDV com transações MongoDB para garantir atomicidade de estoque, pagamento e pedido
 
 ## 3. Ajustes estruturais já concluídos
 
@@ -226,14 +227,14 @@ efetivas = (preset?.permissions ?? defaultRolePermissions[role])
 - Atualizar `README.md` raiz e `packages/api/README.md` (endpoints e regra de permissões).
 - Atualizar `packages/web/README.md` com a nova tela.
 
-### Fase 3 — Vendas, caixa, financeiro e gestão (próxima)
+### Fase 3 — Vendas, caixa, financeiro e gestão (em andamento)
 
 Objetivo: completar o fluxo principal que gera valor para o comércio.
 
-- [ ] Pedidos e PDV.
-- [ ] Formas de pagamento, sem armazenar dados sensíveis de cartão.
-- [ ] Reserva, baixa e estorno de estoque com operações consistentes (reutilizando o módulo `stock` com movimentações `out`/`in` vinculadas ao pedido).
-- [ ] Caixa com abertura, fechamento, sangria e reforço.
+- [x] Pedidos e PDV (backend com transações, baixa/estorno de estoque).
+- [x] Formas de pagamento (módulo `payment` integrado ao pedido; sem dados de cartão).
+- [x] Reserva, baixa e estorno de estoque com operações consistentes (módulo `stock` com movimentações `out`/`in` vinculadas ao pedido).
+- [x] Caixa com abertura, fechamento, sangria e reforço.
 - [ ] Dashboard de vendas.
 - [ ] Contas a pagar e receber.
 - [ ] Fluxo de caixa.
@@ -337,30 +338,31 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 | Itens do pedido | Embedded no pedido | Mantém leitura rápida e snapshot de preço |
 | Caixa | Um documento por abertura/fechamento | Representa corretamente cada turno |
 | Permissões | Roles + presets vinculados + ajustes individuais (extras/revogações) | Preset propaga mudanças para todos os vinculados; ajustes individuais preservam flexibilidade por operador |
+| Pagamentos dos pedidos | Módulo `payment` vinculado a `order`; um pagamento por venda no MVP | Permite evoluir para split de pagamentos e integrações futuras (Pix, maquininha) sem refatorar o pedido |
+| Transações no PDV | Sessões/transações do MongoDB para criação e cancelamento de vendas | Garante atomicidade entre baixa/estorno de estoque, pagamento e pedido; evita vendas fantasmas |
 | Pagamentos da assinatura | Gateway externo | Reduz o tratamento direto de dados financeiros sensíveis |
 
 ## 9. Próximos passos imediatos
 
-### Concluídos (Fases 1 e 2)
+### Concluídos (Fases 1, 2 e parte da 3)
 
 - [x] Isolamento por `tenantId` validado e testado nos módulos existentes.
 - [x] Módulo de empresas/tenants com CNPJ, endereço, nome, logo, cores e status.
 - [x] Audit trail em operações de criação, alteração e exclusão.
 - [x] Usuários, sessões, roles, permissões granulares e presets de permissões (backend).
 - [x] Categorias, produtos (SKU, unidade, estoque mínimo), movimentações de estoque, alertas de baixo estoque, clientes e fornecedores.
+- [x] Caixa, pedidos/vendas (PDV) e pagamentos com baixa/estorno atômico de estoque via transações MongoDB.
 
 ### Próximos passos
 
-1. Criar módulo de vendas/pedidos (PDV) com consistência de estoque.
-2. Criar módulo de caixa (abertura, fechamento, sangria, reforço, vinculação a vendas).
-3. Criar financeiro básico (contas a pagar/receber + fluxo de caixa).
-4. Criar dashboard e relatórios iniciais (vendas do dia, estoque crítico, faturamento).
-5. Implementar recuperação de senha (envio de email/token).
-6. Implementar painel frontend de presets de permissões e permissões por usuário.
-7. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
-8. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
-9. Preparar deploy documentado e processo de rollback (Fase 4).
-10. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
+1. Criar financeiro básico (contas a pagar/receber + fluxo de caixa).
+2. Criar dashboard e relatórios iniciais (vendas do dia, estoque crítico, faturamento).
+3. Implementar recuperação de senha (envio de email/token).
+4. Implementar painel frontend de presets de permissões e permissões por usuário.
+5. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
+6. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
+7. Preparar deploy documentado e processo de rollback (Fase 4).
+8. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
 ## 10. Critérios mínimos para liberar clientes-piloto
 

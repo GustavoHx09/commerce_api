@@ -10,6 +10,8 @@ import {
     hardDeleteProductRepo,
 } from "./productRepo.js";
 import { getCategoryByIdRepo } from "../category/categoryRepo.js";
+import { countStockMovementsByProductRepo } from "../stock/stockMovementRepo.js";
+import { countOrdersByProductRepo } from "../order/orderRepo.js";
 import { isEmpty } from "../../shared/utils/fieldsValidations.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { sanitizeNumberFields, throwValidationError } from "../../shared/utils/serviceHelpers.js";
@@ -206,6 +208,15 @@ export const hardDeleteProductService = async (id, actor) => {
 
     if (!product) {
         throwValidationError("Produto não encontrado", 404);
+    }
+
+    const [hasStockMovements, hasOrders] = await Promise.all([
+        countStockMovementsByProductRepo(id),
+        countOrdersByProductRepo(id),
+    ]);
+
+    if (hasStockMovements > 0 || hasOrders > 0) {
+        throwValidationError("Não é possível excluir permanentemente um produto com histórico de movimentações ou vendas", 409);
     }
 
     await auditAction("product", "delete", product, null, actor.id);

@@ -134,6 +134,8 @@ packages/web/
 - Revogação de sessões: blacklist de tokens no logout e invalidação automática ao trocar a senha
 - Permissões granulares com presets reutilizáveis, concessões extras e revogações individuais
 - Soft delete, isolamento por tenant e validações de CPF/CNPJ em clientes e fornecedores
+- PDV, caixa e pagamentos com baixa/estorno atômico de estoque via transações do MongoDB
+- Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações
 - Comentários explicativos padronizados no código, documentando funções e configurações
 
 ## Licença
