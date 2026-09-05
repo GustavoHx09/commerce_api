@@ -13,20 +13,21 @@ O MVP deve permitir que uma loja controle **produtos, estoque, clientes, fornece
 ## 2. Arquitetura atual
 
 - Backend: Node.js + Express + MongoDB
-- Frontend: Next.js + React + TypeScript + Tailwind
-- Autenticação: JWT em cookie `HttpOnly`
+- Frontend: Next.js 16 + React 19 + TypeScript + Tailwind
+- Autenticação: JWT em cookie `HttpOnly` com blacklist e revogação ao trocar senha
 - Multitenancy: campo `tenantId` nos documentos
 - Roles: `master`, `admin`, `user`
+- Permissões granulares: roles + presets vinculáveis + permissões extras/revogações individuais
 
-## 3. O que ajustar agora antes de crescer
+## 3. Ajustes estruturais já concluídos
 
-Algumas mudanças estruturais são necessárias para suportar os novos módulos de forma limpa:
+As mudanças abaixo foram aplicadas e devem ser mantidas em novos módulos:
 
-1. **Padronizar tenant como empresa**: renomear mentalmente `tenant` para `company`/`business`, mas manter o campo `tenantId` como chave de isolamento.
-2. **Adicionar audit trail**: registrar quem criou/alterou registros sensíveis (quem, quando, o que mudou).
-3. **Isolamento obrigatório**: nenhuma consulta pode esquecer o `tenantId`, exceto para `master`.
-4. **Soft delete consistente**: reutilizar a estratégia já existente nos novos módulos.
-5. **Permissões granulares**: além de roles, definir permissões como `read:products`, `write:orders`, `delete:orders`.
+- [x] **Padronizar tenant como empresa**: renomear mentalmente `tenant` para `company`/`business`, mas manter o campo `tenantId` como chave de isolamento.
+- [x] **Adicionar audit trail**: registrar quem criou/alterou registros sensíveis (quem, quando, o que mudou).
+- [x] **Isolamento obrigatório**: nenhuma consulta pode esquecer o `tenantId`, exceto para `master`.
+- [x] **Soft delete consistente**: reutilizar a estratégia já existente nos novos módulos.
+- [x] **Permissões granulares**: além de roles, definir permissões no formato `resource:action`, com presets vinculados e ajustes individuais.
 
 ## 4. MVP — Produto Mínimo Viável
 
@@ -135,22 +136,23 @@ Algumas mudanças estruturais são necessárias para suportar os novos módulos 
 
 A ordem abaixo separa o que é necessário para construir o produto, liberar clientes-piloto, comercializar com segurança e escalar. Itens de uma fase devem estar estáveis antes de avançar para a seguinte.
 
-### Fase 1 — Fundação, isolamento e identidade da empresa (agora)
+### Fase 1 — Fundação, isolamento e identidade da empresa (concluído)
 
 Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse dados de outra.
 
-- Ajustar e testar o isolamento obrigatório por `tenantId` em todas as consultas.
-- Criar módulo de empresas/tenants robusto, com CNPJ, endereço, status e configurações.
-- Usar um único frontend multitenancy, sem cópias personalizadas por cliente.
-- Permitir nome de exibição, logo e cores por tenant, com validação de formato e tamanho da imagem.
-- Armazenar logos em object storage; não aceitar CSS ou JavaScript fornecido pelo cliente.
-- Refinar usuários, roles e permissões granulares com menor privilégio.
-- Adicionar audit trail para operações sensíveis.
-- Padronizar soft delete e garantir preservação de histórico.
-- Reforçar autenticação, recuperação de senha, expiração e revogação de sessões.
-- Manter segredos fora do código e separar desenvolvimento, homologação e produção.
+- [x] Ajustar e testar o isolamento obrigatório por `tenantId` em todas as consultas.
+- [x] Criar módulo de empresas/tenants robusto, com CNPJ, endereço, status e configurações.
+- [x] Usar um único frontend multitenancy, sem cópias personalizadas por cliente.
+- [x] Permitir nome de exibição, logo e cores por tenant, com validação de formato e tamanho da imagem.
+- [x] Armazenar logos em object storage; não aceitar CSS ou JavaScript fornecido pelo cliente.
+- [x] Refinar usuários, roles e permissões granulares com menor privilégio.
+- [x] Adicionar audit trail para operações sensíveis.
+- [x] Padronizar soft delete e garantir preservação de histórico.
+- [x] Reforçar autenticação, expiração e revogação de sessões.
+- [ ] Implementar recuperação de senha (envio de email/link).
+- [x] Manter segredos fora do código e separar desenvolvimento, homologação e produção.
 
-### Fase 2 — Catálogo, estoque e pessoas
+### Fase 2 — Catálogo, estoque e pessoas (concluído)
 
 Objetivo: entregar a base operacional necessária para registrar produtos e relacionamentos comerciais.
 
@@ -195,8 +197,8 @@ efetivas = (preset?.permissions ?? defaultRolePermissions[role])
 
 - `GET /permission-presets` → lista presets globais + do tenant do usuário (paginado, com soft delete respeitado).
 - `POST /permission-presets` → cria preset (admin cria no próprio tenant; master pode criar global ou de qualquer tenant).
-- `GET /permission-presets/:id`, `PUT /:id`, `DELETE /:id` (soft delete), `POST /:id/restore`.
-- `GET /permissions/available` → retorna o catálogo de permissões válidas do sistema (para montar os checkboxes do painel).
+- `GET /permission-presets/:id`, `PUT /:id`, `DELETE /:id` (soft delete), `PUT /:id/restore`.
+- `GET /permission-presets/available-permissions` → retorna o catálogo de permissões válidas do sistema (para montar os checkboxes do painel).
 - `PUT /users/:id` passa a aceitar `permissionPresetId`, `permissions` e `revokedPermissions` com validações:
   - Preset deve existir, estar ativo e pertencer ao tenant do usuário (ou ser global).
   - Permissões extras/revogadas devem existir no catálogo.
@@ -224,19 +226,19 @@ efetivas = (preset?.permissions ?? defaultRolePermissions[role])
 - Atualizar `README.md` raiz e `packages/api/README.md` (endpoints e regra de permissões).
 - Atualizar `packages/web/README.md` com a nova tela.
 
-### Fase 3 — Vendas, caixa, financeiro e gestão
+### Fase 3 — Vendas, caixa, financeiro e gestão (próxima)
 
 Objetivo: completar o fluxo principal que gera valor para o comércio.
 
-- Pedidos e PDV.
-- Formas de pagamento, sem armazenar dados sensíveis de cartão.
-- Reserva, baixa e estorno de estoque com operações consistentes.
-- Caixa com abertura, fechamento, sangria e reforço.
-- Dashboard de vendas.
-- Contas a pagar e receber.
-- Fluxo de caixa.
-- Relatórios de vendas e estoque.
-- Exportação dos dados essenciais da empresa.
+- [ ] Pedidos e PDV.
+- [ ] Formas de pagamento, sem armazenar dados sensíveis de cartão.
+- [ ] Reserva, baixa e estorno de estoque com operações consistentes (reutilizando o módulo `stock` com movimentações `out`/`in` vinculadas ao pedido).
+- [ ] Caixa com abertura, fechamento, sangria e reforço.
+- [ ] Dashboard de vendas.
+- [ ] Contas a pagar e receber.
+- [ ] Fluxo de caixa.
+- [ ] Relatórios de vendas e estoque.
+- [ ] Exportação dos dados essenciais da empresa.
 
 ### Fase 4 — Segurança, qualidade e operação online
 
@@ -339,18 +341,26 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 
 ## 9. Próximos passos imediatos
 
-1. Auditar e testar o isolamento por `tenantId` em todos os módulos existentes.
-2. Implementar módulo de empresas/tenants com CNPJ, endereço, nome, logo, cores e status.
-3. Adicionar audit trail nas operações de criação, alteração e exclusão.
-4. Refinar usuários, recuperação de senha, sessões, roles e permissões.
-5. Criar módulo de categorias.
-6. Refatorar produtos para suportar unidade, estoque mínimo, categorias, paginação e índices.
-7. Criar movimentações de estoque.
-8. Criar clientes e fornecedores.
-9. Criar vendas, pedidos e itens com consistência de estoque.
-10. Implementar caixa, dashboard, financeiro básico e relatórios.
-11. Executar a Fase 4 completa antes de liberar clientes-piloto.
-12. Concluir as definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
+### Concluídos (Fases 1 e 2)
+
+- [x] Isolamento por `tenantId` validado e testado nos módulos existentes.
+- [x] Módulo de empresas/tenants com CNPJ, endereço, nome, logo, cores e status.
+- [x] Audit trail em operações de criação, alteração e exclusão.
+- [x] Usuários, sessões, roles, permissões granulares e presets de permissões (backend).
+- [x] Categorias, produtos (SKU, unidade, estoque mínimo), movimentações de estoque, alertas de baixo estoque, clientes e fornecedores.
+
+### Próximos passos
+
+1. Criar módulo de vendas/pedidos (PDV) com consistência de estoque.
+2. Criar módulo de caixa (abertura, fechamento, sangria, reforço, vinculação a vendas).
+3. Criar financeiro básico (contas a pagar/receber + fluxo de caixa).
+4. Criar dashboard e relatórios iniciais (vendas do dia, estoque crítico, faturamento).
+5. Implementar recuperação de senha (envio de email/token).
+6. Implementar painel frontend de presets de permissões e permissões por usuário.
+7. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
+8. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
+9. Preparar deploy documentado e processo de rollback (Fase 4).
+10. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
 ## 10. Critérios mínimos para liberar clientes-piloto
 
