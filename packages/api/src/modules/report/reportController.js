@@ -3,6 +3,7 @@ import {
     getTopProductsReportService,
     getInventoryReportService,
     getStockMovementsReportService,
+    getCashFlowReportService,
 } from "./reportService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 
@@ -28,4 +29,10 @@ export const getInventoryReport = async (req, res) => {
 export const getStockMovementsReport = async (req, res) => {
     const result = await getStockMovementsReportService(req.query, req.tenantId);
     return successResponse(res, result, "Movimentações de estoque carregadas com sucesso");
+};
+
+// Retorna relatório de fluxo de caixa consolidado.
+export const getCashFlowReport = async (req, res) => {
+    const result = await getCashFlowReportService(req.query, req.tenantId);
+    return successResponse(res, result, "Fluxo de caixa carregado com sucesso");
 };

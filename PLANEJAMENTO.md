@@ -355,7 +355,7 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 
 ### Próximos passos
 
-1. [ ] Criar financeiro básico (contas a pagar/receber ✓ + fluxo de caixa).
+1. [x] Criar financeiro básico (contas a pagar/receber ✓ + fluxo de caixa).
 2. [x] Criar dashboard e relatórios iniciais (vendas do dia, estoque crítico, faturamento).
 3. Implementar recuperação de senha (envio de email/token).
 4. Implementar painel frontend de presets de permissões e permissões por usuário.

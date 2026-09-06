@@ -133,7 +133,7 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 | `/payments` | Pagamentos vinculados a pedidos |
 | `/bills` | Contas a pagar e receber |
 | `/dashboard` | Vendas do dia/semana/mês, estoque baixo, total em caixa e dados do tenant |
-| `/reports` | Relatórios de vendas, produtos mais vendidos, estoque e movimentações |
+| `/reports` | Relatórios de vendas, produtos mais vendidos, estoque, movimentações e fluxo de caixa |
 | `/audit` | Logs de auditoria |
 
 ## Segurança

@@ -5,6 +5,9 @@ import {
     getInventorySummary,
     getStockMovementsReport,
     countStockMovements,
+    getCashFlowSales,
+    getCashFlowBills,
+    getCashFlowMovements,
 } from "./reportRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isEmpty, isValidDate } from "../../shared/utils/fieldsValidations.js";
@@ -109,4 +112,99 @@ export const getStockMovementsReportService = async (query, tenantId) => {
     ]);
 
     return paginatedResponse(data, page, limit, total);
+};
+
+// Valida o agrupamento do fluxo de caixa, usando 'day' como padrão.
+const getCashFlowGroupBy = (value) => {
+    const group = isEmpty(value) ? "day" : String(value).toLowerCase();
+    if (!VALID_GROUP_BY.includes(group)) {
+        throwValidationError("Agrupamento inválido. Valores aceitos: day, month, year, none");
+    }
+    return group;
+};
+
+// Calcula os totais de um período a partir dos valores parciais.
+const buildCashFlowTotals = (values) => {
+    const sales = values.sales || 0;
+    const billsReceive = values.billsReceive || 0;
+    const billsPay = values.billsPay || 0;
+    const suprimentos = values.suprimentos || 0;
+    const sangrias = values.sangrias || 0;
+    const inflow = sales + billsReceive + suprimentos;
+    const outflow = billsPay + sangrias;
+    const balance = inflow - outflow;
+
+    return { sales, billsReceive, billsPay, suprimentos, sangrias, inflow, outflow, balance };
+};
+
+// Mescla os arrays de vendas, contas e movimentações por período.
+const mergeCashFlowByPeriod = (sales, bills, movements) => {
+    const map = new Map();
+
+    for (const item of sales) {
+        const current = map.get(item.period) || {};
+        map.set(item.period, { ...current, sales: item.total });
+    }
+
+    for (const item of bills) {
+        const current = map.get(item.period) || {};
+        map.set(item.period, { ...current, billsReceive: item.receive, billsPay: item.pay });
+    }
+
+    for (const item of movements) {
+        const current = map.get(item.period) || {};
+        map.set(item.period, { ...current, suprimentos: item.suprimentos, sangrias: item.sangrias });
+    }
+
+    const data = [];
+    const keys = Array.from(map.keys()).sort();
+
+    for (const period of keys) {
+        const totals = buildCashFlowTotals(map.get(period));
+        data.push({ period, ...totals });
+    }
+
+    const summary = data.reduce(
+        (acc, item) => ({
+            sales: acc.sales + item.sales,
+            billsReceive: acc.billsReceive + item.billsReceive,
+            billsPay: acc.billsPay + item.billsPay,
+            suprimentos: acc.suprimentos + item.suprimentos,
+            sangrias: acc.sangrias + item.sangrias,
+            inflow: acc.inflow + item.inflow,
+            outflow: acc.outflow + item.outflow,
+            balance: acc.balance + item.balance,
+        }),
+        { sales: 0, billsReceive: 0, billsPay: 0, suprimentos: 0, sangrias: 0, inflow: 0, outflow: 0, balance: 0 }
+    );
+
+    return { data, summary };
+};
+
+// Relatório de fluxo de caixa consolidado.
+export const getCashFlowReportService = async (query, tenantId) => {
+    const { start, end } = getDateRange(query);
+    const groupBy = getCashFlowGroupBy(query.groupBy);
+
+    const [sales, bills, movements] = await Promise.all([
+        getCashFlowSales(tenantId, start, end, groupBy),
+        getCashFlowBills(tenantId, start, end, groupBy),
+        getCashFlowMovements(tenantId, start, end, groupBy),
+    ]);
+
+    if (groupBy === "none") {
+        const summary = buildCashFlowTotals({
+            sales: sales.total,
+            billsReceive: bills.receive,
+            billsPay: bills.pay,
+            suprimentos: movements.suprimentos,
+            sangrias: movements.sangrias,
+        });
+
+        return { start, end, groupBy, summary };
+    }
+
+    const { data, summary } = mergeCashFlowByPeriod(sales, bills, movements);
+
+    return { start, end, groupBy, data, summary };
 };

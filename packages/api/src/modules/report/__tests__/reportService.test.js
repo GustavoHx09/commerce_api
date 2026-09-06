@@ -4,6 +4,7 @@ import {
     getTopProductsReportService,
     getInventoryReportService,
     getStockMovementsReportService,
+    getCashFlowReportService,
 } from '../reportService.js';
 
 const mockGetSalesSummary = vi.fn();
@@ -12,6 +13,9 @@ const mockGetInventoryReport = vi.fn();
 const mockGetInventorySummary = vi.fn();
 const mockGetStockMovementsReport = vi.fn();
 const mockCountStockMovements = vi.fn();
+const mockGetCashFlowSales = vi.fn();
+const mockGetCashFlowBills = vi.fn();
+const mockGetCashFlowMovements = vi.fn();
 
 vi.mock('../reportRepo.js', () => ({
     getSalesSummary: (...args) => mockGetSalesSummary(...args),
@@ -20,6 +24,9 @@ vi.mock('../reportRepo.js', () => ({
     getInventorySummary: (...args) => mockGetInventorySummary(...args),
     getStockMovementsReport: (...args) => mockGetStockMovementsReport(...args),
     countStockMovements: (...args) => mockCountStockMovements(...args),
+    getCashFlowSales: (...args) => mockGetCashFlowSales(...args),
+    getCashFlowBills: (...args) => mockGetCashFlowBills(...args),
+    getCashFlowMovements: (...args) => mockGetCashFlowMovements(...args),
 }));
 
 describe('reportService', () => {
@@ -131,5 +138,51 @@ describe('reportService', () => {
         await expect(
             getStockMovementsReportService({ type: 'invalid' }, 'tenantA')
         ).rejects.toThrow('Tipo de movimentação inválido');
+    });
+
+    it('returns cash flow report grouped by day with merged data', async () => {
+        mockGetCashFlowSales.mockResolvedValue([{ period: '2026-09-05', total: 100 }]);
+        mockGetCashFlowBills.mockResolvedValue([{ period: '2026-09-05', receive: 50, pay: 20 }]);
+        mockGetCashFlowMovements.mockResolvedValue([{ period: '2026-09-05', suprimentos: 10, sangrias: 5 }]);
+
+        const result = await getCashFlowReportService({ groupBy: 'day' }, 'tenantA');
+
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].sales).toBe(100);
+        expect(result.data[0].billsReceive).toBe(50);
+        expect(result.data[0].billsPay).toBe(20);
+        expect(result.data[0].suprimentos).toBe(10);
+        expect(result.data[0].sangrias).toBe(5);
+        expect(result.data[0].inflow).toBe(160);
+        expect(result.data[0].outflow).toBe(25);
+        expect(result.data[0].balance).toBe(135);
+        expect(result.summary.balance).toBe(135);
+    });
+
+    it('returns cash flow summary when groupBy is none', async () => {
+        mockGetCashFlowSales.mockResolvedValue({ total: 200 });
+        mockGetCashFlowBills.mockResolvedValue({ receive: 80, pay: 40 });
+        mockGetCashFlowMovements.mockResolvedValue({ suprimentos: 20, sangrias: 10 });
+
+        const result = await getCashFlowReportService({ groupBy: 'none' }, 'tenantA');
+
+        expect(result.summary.inflow).toBe(300);
+        expect(result.summary.outflow).toBe(50);
+        expect(result.summary.balance).toBe(250);
+    });
+
+    it('defaults cash flow groupBy to day', async () => {
+        mockGetCashFlowSales.mockResolvedValue([]);
+        mockGetCashFlowBills.mockResolvedValue([]);
+        mockGetCashFlowMovements.mockResolvedValue([]);
+
+        const result = await getCashFlowReportService({}, 'tenantA');
+
+        expect(result.groupBy).toBe('day');
+        expect(result.data).toEqual([]);
+    });
+
+    it('rejects invalid cash flow groupBy', async () => {
+        await expect(getCashFlowReportService({ groupBy: 'hour' }, 'tenantA')).rejects.toThrow('Agrupamento inválido');
     });
 });
