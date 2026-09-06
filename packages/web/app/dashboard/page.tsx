@@ -81,10 +81,10 @@ export default function DashboardPage() {
   const primaryColor = tenant?.colors?.primary || '#2563eb';
 
   const cards = [
-    { label: 'Vendas hoje', value: formatCurrency(dashboard?.salesToday.total || 0), sub: `${dashboard?.salesToday.count || 0} venda(s)` },
-    { label: 'Vendas da semana', value: formatCurrency(dashboard?.salesWeek.total || 0), sub: `${dashboard?.salesWeek.count || 0} venda(s)` },
-    { label: 'Vendas do mês', value: formatCurrency(dashboard?.salesMonth.total || 0), sub: `${dashboard?.salesMonth.count || 0} venda(s)` },
-    { label: 'Total em caixa', value: formatCurrency(dashboard?.totalInCashier || 0), sub: `${dashboard?.openCashiersCount || 0} caixa(s) aberto(s)` },
+    { label: 'Vendas hoje', value: formatCurrency(dashboard?.salesToday?.total ?? 0), sub: `${dashboard?.salesToday?.count ?? 0} venda(s)` },
+    { label: 'Vendas da semana', value: formatCurrency(dashboard?.salesWeek?.total ?? 0), sub: `${dashboard?.salesWeek?.count ?? 0} venda(s)` },
+    { label: 'Vendas do mês', value: formatCurrency(dashboard?.salesMonth?.total ?? 0), sub: `${dashboard?.salesMonth?.count ?? 0} venda(s)` },
+    { label: 'Total em caixa', value: formatCurrency(dashboard?.totalInCashier ?? 0), sub: `${dashboard?.openCashiersCount ?? 0} caixa(s) aberto(s)` },
     { label: 'Produtos', value: dashboard?.totalProducts ?? '-', sub: 'cadastrados' },
     { label: 'Clientes', value: dashboard?.totalCustomers ?? '-', sub: 'cadastrados' },
   ];
@@ -146,11 +146,11 @@ export default function DashboardPage() {
 
       <div className="rounded-xl bg-white p-6 shadow">
         <h2 className="mb-4 text-xl font-bold text-gray-900">Produtos com estoque baixo</h2>
-        {dashboard && dashboard.lowStockProducts.length === 0 ? (
+        {dashboard?.lowStockProducts && dashboard.lowStockProducts.length === 0 ? (
           <p className="text-gray-600">Nenhum produto com estoque baixo no momento.</p>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {dashboard?.lowStockProducts.map((product) => (
+            {dashboard?.lowStockProducts?.map((product) => (
               <li key={product._id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="font-medium text-gray-900">{product.name}</p>

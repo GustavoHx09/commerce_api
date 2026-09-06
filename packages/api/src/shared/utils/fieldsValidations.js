@@ -131,3 +131,10 @@ export const isValidDocument = (document, type) => {
 
     return false;
 };
+
+// Valida se o valor pode ser convertido em uma data válida.
+export const isValidDate = (value) => {
+    if (isEmpty(value)) return false;
+    const date = new Date(value);
+    return !isNaN(date.getTime());
+};
