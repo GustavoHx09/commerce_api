@@ -352,6 +352,7 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 - [x] Usuários, sessões, roles, permissões granulares e presets de permissões (backend).
 - [x] Categorias, produtos (SKU, unidade, estoque mínimo), movimentações de estoque, alertas de baixo estoque, clientes e fornecedores.
 - [x] Caixa, pedidos/vendas (PDV) e pagamentos com baixa/estorno atômico de estoque via transações MongoDB.
+- [x] Exportação de dados essenciais (produtos, clientes, fornecedores, categorias e pedidos) em CSV/JSON.
 
 ### Próximos passos
 

@@ -16,6 +16,7 @@ import cashierRoutes from './modules/cashier/cashierRoutes.js';
 import orderRoutes from './modules/order/orderRoutes.js';
 import paymentRoutes from './modules/payment/paymentRoutes.js';
 import reportRoutes from './modules/report/reportRoutes.js';
+import exportRoutes from './modules/export/exportRoutes.js';
 
 // Roteador principal que agrupa todas as rotas da API.
 const router = Router();
@@ -36,5 +37,6 @@ router.use('/cashiers', authMiddleware, cashierRoutes);
 router.use('/orders', authMiddleware, orderRoutes);
 router.use('/payments', authMiddleware, paymentRoutes);
 router.use('/reports', authMiddleware, tenantMiddleware, reportRoutes);
+router.use('/export', authMiddleware, tenantMiddleware, exportRoutes);
 
 export default router;

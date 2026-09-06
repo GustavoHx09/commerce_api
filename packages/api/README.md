@@ -134,6 +134,7 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 | `/bills` | Contas a pagar e receber |
 | `/dashboard` | Vendas do dia/semana/mês, estoque baixo, total em caixa e dados do tenant |
 | `/reports` | Relatórios de vendas, produtos mais vendidos, estoque, movimentações e fluxo de caixa |
+| `/export` | Exportação de categorias, produtos, clientes, fornecedores e pedidos em CSV/JSON |
 | `/audit` | Logs de auditoria |
 
 ## Segurança
