@@ -235,7 +235,7 @@ Objetivo: completar o fluxo principal que gera valor para o comércio.
 - [x] Formas de pagamento (módulo `payment` integrado ao pedido; sem dados de cartão).
 - [x] Reserva, baixa e estorno de estoque com operações consistentes (módulo `stock` com movimentações `out`/`in` vinculadas ao pedido).
 - [x] Caixa com abertura, fechamento, sangria e reforço.
-- [ ] Dashboard de vendas.
+- [x] Dashboard de vendas (backend + frontend: vendas do dia/semana/mês, estoque baixo, total em caixa).
 - [ ] Contas a pagar e receber.
 - [ ] Fluxo de caixa.
 - [ ] Relatórios de vendas e estoque.
