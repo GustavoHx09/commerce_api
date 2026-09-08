@@ -47,7 +47,8 @@ As mudanças abaixo foram aplicadas e devem ser mantidas em novos módulos:
 | Caixa | Abertura, fechamento, movimentações, sangria, reforço | Alta |
 | Financeiro básico | Contas a pagar/receber, fluxo de caixa simplificado | Média |
 | Dashboard | Vendas do dia, estoque crítico, faturamento | Alta |
-| Relatórios | Vendas por período, produtos mais vendidos, posição de estoque | Média |
+| Relatórios | Vendas por período, produtos mais vendidos, posição de estoque, fluxo de caixa | Média |
+| Exportação | Download de produtos, clientes, fornecedores, categorias e pedidos em CSV/JSON | Média |
 
 ### 4.2 Regras de negócio do MVP
 
@@ -137,7 +138,7 @@ As mudanças abaixo foram aplicadas e devem ser mantidas em novos módulos:
 
 A ordem abaixo separa o que é necessário para construir o produto, liberar clientes-piloto, comercializar com segurança e escalar. Itens de uma fase devem estar estáveis antes de avançar para a seguinte.
 
-### Fase 1 — Fundação, isolamento e identidade da empresa (concluído)
+### Fase 1 — Fundação, isolamento e identidade da empresa (em andamento — recuperação de senha pendente)
 
 Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse dados de outra.
 
@@ -150,10 +151,10 @@ Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse 
 - [x] Adicionar audit trail para operações sensíveis.
 - [x] Padronizar soft delete e garantir preservação de histórico.
 - [x] Reforçar autenticação, expiração e revogação de sessões.
-- [ ] Implementar recuperação de senha (envio de email/link).
+- [ ] Implementar recuperação de senha com envio de email e token temporário.
 - [x] Manter segredos fora do código e separar desenvolvimento, homologação e produção.
 
-### Fase 2 — Catálogo, estoque e pessoas (concluído)
+### Fase 2 — Catálogo, estoque e pessoas (concluído; extensão 2.1 em andamento)
 
 Objetivo: entregar a base operacional necessária para registrar produtos e relacionamentos comerciais.
 
@@ -166,7 +167,7 @@ Objetivo: entregar a base operacional necessária para registrar produtos e rela
 - [x] Paginação, filtros e índices para as consultas principais.
 - [x] Sistema de presets de permissões (backend concluído; painel do frontend na fase de UI).
 
-#### Fase 2.1 — Presets de permissões e painel de autorizações
+#### Fase 2.1 — Presets de permissões e painel de autorizações (em andamento — backend concluído, frontend pendente)
 
 Objetivo: permitir que o admin de cada empresa gerencie as autorizações dos operadores por meio de presets reutilizáveis e ajustes individuais.
 
@@ -227,7 +228,7 @@ efetivas = (preset?.permissions ?? defaultRolePermissions[role])
 - Atualizar `README.md` raiz e `packages/api/README.md` (endpoints e regra de permissões).
 - Atualizar `packages/web/README.md` com a nova tela.
 
-### Fase 3 — Vendas, caixa, financeiro e gestão (em andamento)
+### Fase 3 — Vendas, caixa, financeiro e gestão (concluído)
 
 Objetivo: completar o fluxo principal que gera valor para o comércio.
 
@@ -237,9 +238,9 @@ Objetivo: completar o fluxo principal que gera valor para o comércio.
 - [x] Caixa com abertura, fechamento, sangria e reforço.
 - [x] Dashboard de vendas (backend + frontend: vendas do dia/semana/mês, estoque baixo, total em caixa).
 - [x] Contas a pagar e receber (módulo bill).
-- [ ] Fluxo de caixa.
-- [ ] Relatórios de vendas e estoque.
-- [ ] Exportação dos dados essenciais da empresa.
+- [x] Fluxo de caixa.
+- [x] Relatórios de vendas e estoque.
+- [x] Exportação dos dados essenciais da empresa.
 
 ### Fase 4 — Segurança, qualidade e operação online
 
@@ -344,7 +345,7 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 
 ## 9. Próximos passos imediatos
 
-### Concluídos (Fases 1, 2 e parte da 3)
+### Entregas concluídas
 
 - [x] Isolamento por `tenantId` validado e testado nos módulos existentes.
 - [x] Módulo de empresas/tenants com CNPJ, endereço, nome, logo, cores e status.
@@ -352,18 +353,18 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 - [x] Usuários, sessões, roles, permissões granulares e presets de permissões (backend).
 - [x] Categorias, produtos (SKU, unidade, estoque mínimo), movimentações de estoque, alertas de baixo estoque, clientes e fornecedores.
 - [x] Caixa, pedidos/vendas (PDV) e pagamentos com baixa/estorno atômico de estoque via transações MongoDB.
+- [x] Contas a pagar e receber, fluxo de caixa e dashboard de vendas.
+- [x] Relatórios de vendas, produtos, estoque, movimentações e fluxo de caixa.
 - [x] Exportação de dados essenciais (produtos, clientes, fornecedores, categorias e pedidos) em CSV/JSON.
 
 ### Próximos passos
 
-1. [x] Criar financeiro básico (contas a pagar/receber ✓ + fluxo de caixa).
-2. [x] Criar dashboard e relatórios iniciais (vendas do dia, estoque crítico, faturamento).
-3. Implementar recuperação de senha (envio de email/token).
-4. Implementar painel frontend de presets de permissões e permissões por usuário.
-5. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
-6. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
-7. Preparar deploy documentado e processo de rollback (Fase 4).
-8. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
+1. Implementar recuperação de senha (envio de email/token).
+2. Implementar painel frontend de presets de permissões e permissões por usuário.
+3. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
+4. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
+5. Preparar deploy documentado e processo de rollback (Fase 4).
+6. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
 ## 10. Critérios mínimos para liberar clientes-piloto
 
