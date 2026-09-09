@@ -26,6 +26,8 @@ export const rateLimiter = rateLimit({
     max: 100, // 100 requisições por IP
     standardHeaders: true,
     legacyHeaders: false,
+    // Desabilita a validação do proxy para ambientes como o Render, onde o trust proxy é gerenciado no app.
+    validate: { xForwardedForHeader: false },
     message: {
         message: "AVISO: Muitas requisições, tente novamente mais tarde",
     },
@@ -37,6 +39,7 @@ export const authRateLimiter = rateLimit({
     max: 10, // 10 tentativas por IP
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
     message: {
         message: "AVISO: Muitas tentativas de login, tente novamente mais tarde",
     },

@@ -19,6 +19,10 @@ dotenv.config();
 
 const app = express();
 
+// Confia no proxy do provedor de hospedagem (Render/Vercel) para ler corretamente
+// headers como X-Forwarded-For, necessário para rate limiting e logs.
+app.set("trust proxy", 1);
+
 // Converte a string de origens permitidas em um array para o CORS.
 const allowedOrigins = appConfig.corsUrl.split(",").map((url) => url.trim()).filter(Boolean);
 
