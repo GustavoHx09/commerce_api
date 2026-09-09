@@ -5,11 +5,12 @@
   "type": "module",
   "main": "src/app.js",
   "scripts": {
-    "dev": "node --watch src/app.js",
-    "start": "node src/app.js",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
     "seed": "node src/shared/database/seed.js",
     "lint": "eslint src",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.js",
     "test:watch": "vitest"
   },
   "keywords": [],
@@ -32,6 +33,7 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "globals": "^17.11.0",
+    "supertest": "^7.1.0",
     "vitest": "^4.1.11"
   }
 }

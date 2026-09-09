@@ -48,6 +48,8 @@ Variáveis prefixadas com `NEXT_PUBLIC_` ficam disponíveis no cliente Next.js.
 
 ## Como rodar
 
+O frontend precisa que a API esteja rodando. Veja o README de `packages/api` para subir o MongoDB via Docker e a API localmente.
+
 Na raiz do monorepo:
 
 ```bash

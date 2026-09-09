@@ -20,6 +20,43 @@ if (!fs.existsSync(logsDir)) {
 // Stream de escrita em modo append para registrar as requisições.
 const accessLogStream = fs.createWriteStream(logFilePath, { flags: "a" });
 
+// Chaves de query string cujos valores devem ser ofuscados nos logs.
+const sensitiveQueryKeys = new Set([
+    "password",
+    "token",
+    "secret",
+    "access_token",
+    "refresh_token",
+    "cpf",
+    "cnpj",
+    "card",
+    "cvv",
+]);
+
+// Substitui o valor de parâmetros sensíveis por asteriscos, evitando vazar dados pessoais ou segredos.
+const redactUrl = (originalUrl) => {
+    if (!originalUrl || !originalUrl.includes("?")) {
+        return originalUrl;
+    }
+
+    try {
+        const [pathname, search] = originalUrl.split("?");
+        const params = new URLSearchParams(search);
+
+        for (const key of params.keys()) {
+            const lower = key.toLowerCase();
+            if (sensitiveQueryKeys.has(lower)) {
+                params.set(key, "***");
+            }
+        }
+
+        const redactedSearch = params.toString();
+        return redactedSearch ? `${pathname}?${redactedSearch}` : pathname;
+    } catch {
+        return originalUrl;
+    }
+};
+
 // Token customizado do Morgan para exibir o timestamp ISO da requisição.
 morgan.token("timestamp", () => {
     return new Date().toISOString();
@@ -38,6 +75,11 @@ morgan.token("role", (req) => {
 // Token customizado que recupera o tenantId do usuário autenticado, se houver.
 morgan.token("tenantId", (req) => {
     return req.user?.tenantId || "-";
+});
+
+// Substitui o token padrão de URL para ofuscar parâmetros sensíveis.
+morgan.token("url", (req) => {
+    return redactUrl(req.originalUrl);
 });
 
 // Formato do log de requisição, com informações de auditoria.

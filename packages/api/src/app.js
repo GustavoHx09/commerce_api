@@ -4,7 +4,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import routes from "./routes.js";
-import { connectDB } from "./shared/config/connectDB.js";
 import { appConfig } from "./shared/config/appConfig.js";
 import { requestLogger, requestLoggerConsole } from "./shared/config/logger.js";
 import {
@@ -44,13 +43,5 @@ app.use("/api/v1", routes);
 // Handlers de erro e rota não encontrada.
 app.use(notFoundHandler);
 app.use(errorHandler);
-
-// Inicia a conexão com o MongoDB.
-connectDB();
-
-// Inicia o servidor na porta definida em variável de ambiente.
-app.listen(appConfig.port, () => {
-    console.log(`API rodando na porta http://localhost:${appConfig.port}`);
-});
 
 export default app;

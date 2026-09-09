@@ -41,7 +41,7 @@ cp .env.example .env
 
 | Variável | Descrição | Obrigatório |
 | --- | --- | --- |
-| `MONGO_URI` | URI de conexão com o MongoDB. Transações exigem um replica set (Atlas já atende; local use `?replicaSet=rs0`). | Sim |
+| `MONGO_URI` | URI de conexão com o MongoDB. Localmente, use o Docker Compose (`docker compose up -d`), que já sobe o replica set `rs0`. | Sim |
 | `JWT_SECRET` | Chave secreta para assinatura do JWT | Sim |
 | `JWT_EXPIRES_IN` | Tempo de expiração do JWT (padrão: `7d`) | Não |
 | `CORS_URL` | Origens permitidas pelo CORS (padrão: `http://localhost:3000`) | Não |
@@ -54,6 +54,12 @@ cp .env.example .env
 | `USER_PASSWORD` | Senha do usuário criado pelo seed | Não |
 
 ## Como rodar
+
+Certifique-se de que o MongoDB local está no ar:
+
+```bash
+docker compose up -d
+```
 
 Na raiz do monorepo:
 
@@ -156,3 +162,47 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 - Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações
 - Soft delete e índices de unicidade parciais por tenant
 - Comentários explicativos padronizados no código
+
+## Testes
+
+| Comando | Descrição |
+| --- | --- |
+| `npm run test` | Roda os testes unitários uma vez |
+| `npm run test:integration` | Roda os testes de integração contra o MongoDB local via Docker |
+| `npm run test:watch` | Roda os testes em modo watch |
+
+Os testes de integração exigem o MongoDB local do Docker rodando. Eles usam o URI:
+
+```text
+mongodb://localhost:27017/commerce_api_test?replicaSet=rs0
+```
+
+Você pode sobrescrever esse valor criando um arquivo `.env.test`:
+
+```bash
+MONGO_URI_TEST=mongodb://localhost:27017/commerce_api_test?replicaSet=rs0
+```
+
+Antes de rodar os testes, certifique-se de que o container está no ar:
+
+```bash
+docker compose up -d
+```
+
+## Backup e restauração local (sem ferramentas pagas)
+
+Para fazer backup do MongoDB local, use `mongodump`:
+
+```bash
+# Backup completo do banco de desenvolvimento
+mongodump --uri="mongodb://localhost:27017/commerce_api_dev?replicaSet=rs0" --out=./backups/$(date +%Y%m%d-%H%M%S)
+```
+
+Para restaurar:
+
+```bash
+# Substitua <pasta-do-backup> pelo diretório gerado
+mongorestore --uri="mongodb://localhost:27017/commerce_api_dev?replicaSet=rs0" --drop ./backups/<pasta-do-backup>/commerce_api_dev
+```
+
+Em produção (MongoDB Atlas) o dump/restore funciona da mesma forma, trocando a URI. Para backups automatizados em produção, configure um script de cron ou pipeline CI que armazene os dumps em um storage confiável.

@@ -27,28 +27,54 @@ Os packages funcionam de forma independente, mas compartilham scripts gerenciado
 ## Requisitos
 
 - Node.js (versão LTS recomendada)
-- MongoDB local ou MongoDB Atlas
 - npm
+- Docker e Docker Compose (para MongoDB local)
+
+> Para produção, use MongoDB Atlas ou outro MongoDB gerenciado. Localmente o Docker Compose sobe tudo pronto.
 
 ## Configuração
 
+### 1. Variáveis de ambiente
+
 Crie os arquivos `.env` a partir dos exemplos em cada package.
 
-### Backend (`packages/api`)
+#### Backend (`packages/api`)
 
 ```bash
 cp packages/api/.env.example packages/api/.env
 ```
 
-Edite `packages/api/.env` com suas credenciais. Veja o README de `packages/api` para a descrição completa das variáveis.
+O exemplo já vem configurado para o MongoDB local via Docker:
 
-### Frontend (`packages/web`)
+```env
+MONGO_URI=mongodb://localhost:27017/commerce_api_dev?replicaSet=rs0
+```
+
+Para produção, substitua pela URI do MongoDB Atlas.
+
+#### Frontend (`packages/web`)
 
 ```bash
 cp packages/web/.env.example packages/web/.env
 ```
 
 Edite `packages/web/.env` com a URL da API.
+
+### 2. Banco de dados local (Docker)
+
+Suba o MongoDB com replica set:
+
+```bash
+docker compose up -d
+```
+
+Isso expõe o MongoDB em `localhost:27017` já configurado como replica set (`rs0`), necessário para as transações do MongoDB.
+
+Para parar:
+
+```bash
+docker compose down
+```
 
 ## Instalação
 
@@ -80,11 +106,15 @@ npm run dev -w web
 
 | Comando | Descrição |
 | --- | --- |
+| `docker compose up -d` | Sobe o MongoDB local com replica set |
 | `npm run dev` | Sobe API e web em paralelo |
+| `npm run dev -w api` | Sobe só a API |
+| `npm run dev -w web` | Sobe só o frontend |
 | `npm run build` | Builda o frontend |
 | `npm run start` | Inicia a API em produção |
 | `npm run seed -w api` | Roda o seed da API |
 | `npm run test -w api` | Roda os testes unitários da API |
+| `npm run test:integration -w api` | Roda os testes de integração da API (precisa do Docker) |
 | `npm run lint -w api` | ESLint no backend |
 | `npm run lint -w web` | ESLint no frontend |
 | `npm run type-check -w web` | Type check no frontend |

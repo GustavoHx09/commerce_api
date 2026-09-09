@@ -246,20 +246,24 @@ Objetivo: completar o fluxo principal que gera valor para o comércio.
 
 Objetivo: preparar o sistema para receber clientes-piloto sem depender de banco local ou operação offline.
 
-- Testes unitários e de integração dos fluxos críticos.
-- Testes automatizados de autorização e isolamento entre tenants.
-- Validações equivalentes no frontend e no backend.
-- Proteções contra NoSQL injection, XSS, CSRF, brute force e uploads maliciosos.
-- HTTPS, cookies seguros, CORS restrito e headers de segurança.
-- Rate limiting por IP, usuário e tenant.
-- Logs centralizados sem senhas, tokens ou dados pessoais desnecessários.
-- Monitoramento de erros, latência, disponibilidade, CPU, memória, disco e conexões do banco.
-- Alertas para falhas críticas e indisponibilidade.
-- Banco gerenciado com backups automáticos, criptografia e recuperação point-in-time.
-- Teste documentado de restauração de backup.
-- Processo de deploy, rollback e migração de dados.
-- Testes de carga com cenários reais e correção de consultas lentas.
-- Definir RPO e RTO iniciais de acordo com custo e necessidade dos clientes-piloto.
+Escopo mínimo aprovado para os primeiros pilotos, **sem Redis e sem ferramentas pagas**:
+
+- [x] Testes unitários e de integração dos fluxos críticos (auth, tenant, autorização, venda/caixa/estoque/pagamento).
+- [x] Testes automatizados de autorização e isolamento entre tenants.
+- [ ] Validações equivalentes no frontend e no backend (frontend será feito na fase de UI).
+- [x] Proteções contra NoSQL injection, XSS, CSRF, brute force e uploads maliciosos (revisão básica aplicada).
+- [x] HTTPS, cookies seguros, CORS restrito e headers de segurança.
+- [x] Rate limiting por IP, usuário e tenant (em memória; substituir por store compartilhada ao escalar).
+- [x] Logs sem senhas, tokens, CPF/CNPJ completos, endereços ou telefones desnecessários.
+- [ ] Monitoramento de erros, latência, disponibilidade, CPU, memória, disco e conexões do banco (sem ferramenta paga no momento).
+- [ ] Alertas para falhas críticas e indisponibilidade (sem ferramenta paga no momento).
+- [x] Backup e restauração documentados com `mongodump`/`mongorestore` para desenvolvimento/estágio inicial.
+- [ ] Backup automático point-in-time em produção (depende de provedor gerenciado pago; adiar até primeiro cliente-piloto definido).
+- [x] Teste documentado de restauração de backup (comandos descritos no README da API).
+- [x] Dockerfile e CI com testes unitários/integração.
+- [ ] Documento de deploy e rollback detalhado para produção.
+- [ ] Testes de carga com cenários reais e correção de consultas lentas.
+- [ ] Definir RPO e RTO iniciais de acordo com custo e necessidade dos clientes-piloto.
 
 ### Fase 5 — Preparação comercial e clientes-piloto
 
@@ -361,9 +365,9 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 
 1. Implementar recuperação de senha (envio de email/token).
 2. Implementar painel frontend de presets de permissões e permissões por usuário.
-3. Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
-4. Avaliar e aplicar proteções de segurança restantes (rate limiting por tenant, logs sem dados sensíveis, etc.).
-5. Preparar deploy documentado e processo de rollback (Fase 4).
+3. [x] Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
+4. [x] Aplicar proteções de segurança restantes: rate limiting por IP/usuário/tenant, logs sem dados sensíveis, headers de segurança e revisão básica de upload.
+5. Preparar documento de deploy e rollback detalhado para produção (Render + MongoDB Atlas).
 6. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
 ## 10. Critérios mínimos para liberar clientes-piloto

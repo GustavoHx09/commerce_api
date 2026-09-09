@@ -4,6 +4,7 @@ import users from "../../modules/user/userModel.js";
 import tenants from "../../modules/tenant/tenantModel.js";
 import { isTokenRevoked } from "../../modules/auth/authService.js";
 import { populateUserPermissionPreset } from "../utils/permissionHelpers.js";
+import { checkUserRateLimit, checkTenantRateLimit } from "../utils/rateLimitHelpers.js";
 
 // Verifica o JWT, valida se o usuário ainda existe/está ativo e anexa os dados atualizados.
 export const authMiddleware = async (req, res, next) => {
@@ -64,10 +65,18 @@ export const authMiddleware = async (req, res, next) => {
             passwordChangedAt: user.passwordChangedAt || null,
         };
 
+        // Aplica rate limit por usuário e por tenant antes de seguir com a requisição.
+        await checkUserRateLimit(req.user.id);
+        await checkTenantRateLimit(req.user.tenantId);
+
         await populateUserPermissionPreset(req.user);
 
         next();
     } catch (error) {
+        if (error.statusCode) {
+            return next(error);
+        }
+
         if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
             return res.status(401).json({ message: "Token inválido ou expirado" });
         }

@@ -115,3 +115,11 @@ modules/<nome>/
 - Sempre repasse a `session` do Mongoose para repositories e `auditAction` envolvidos na mesma transação.
 - Transações exigem um replica set. Em produção use MongoDB Atlas. Para desenvolvimento local, inicie `mongod` com `--replSet rs0` e execute `rs.initiate()` uma vez.
 - O helper pode cair para execução sem transação em ambientes sem replica set, emitindo um aviso. Não desative esse comportamento em produção.
+
+## 14. Ambiente de testes de integração
+
+- Os testes de integração rodam contra o MongoDB local disponibilizado pelo Docker Compose.
+- Para executar os testes de integração, rode: `npm run test:integration -w api`.
+- A configuração está em `packages/api/vitest.integration.config.js`, com `globalSetup` e `setupFiles`.
+- Antes de rodar, certifique-se de que o container está no ar: `docker compose up -d`.
+- O URI padrão é `mongodb://localhost:27017/commerce_api_test?replicaSet=rs0` e pode ser sobrescrito por `MONGO_URI_TEST`.
