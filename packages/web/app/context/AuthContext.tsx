@@ -5,7 +5,6 @@ import React, {
   useContext,
   useEffect,
   useState,
-  useCallback,
 } from 'react';
 import api from '@/lib/api';
 
@@ -17,9 +16,20 @@ interface User {
   tenantId: string | null;
 }
 
+interface Tenant {
+  _id: string;
+  name: string;
+  displayName?: string;
+  logoUrl?: string;
+  colors?: {
+    primary?: string;
+    secondary?: string;
+  };
+}
+
 interface AuthContextData {
   user: User | null;
-  accessToken: string | null;
+  tenant: Tenant | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -27,86 +37,35 @@ interface AuthContextData {
 
 const AuthContext = createContext<AuthContextData | undefined>(undefined);
 
-let isRefreshing = false;
-let refreshPromise: Promise<string> | null = null;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshAccessToken = useCallback(async () => {
-    if (isRefreshing && refreshPromise) {
-      return refreshPromise;
+  const fetchTenant = async (tenantId: string | null) => {
+    if (!tenantId) {
+      setTenant(null);
+      return;
     }
 
-    isRefreshing = true;
-    refreshPromise = api
-      .post('/auth/refresh')
-      .then((response) => response.data.data.accessToken)
-      .finally(() => {
-        isRefreshing = false;
-        refreshPromise = null;
-      });
-
-    return refreshPromise;
-  }, []);
+    try {
+      const response = await api.get('/tenants/me');
+      setTenant(response.data.data.tenant);
+    } catch {
+      setTenant(null);
+    }
+  };
 
   useEffect(() => {
-    const requestInterceptor = api.interceptors.request.use(
-      (config) => {
-        if (accessToken && config.headers) {
-          config.headers.Authorization = `Bearer ${accessToken}`;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    const responseInterceptor = api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-
-        if (
-          error.response?.status === 401 &&
-          originalRequest &&
-          !originalRequest._retry
-        ) {
-          originalRequest._retry = true;
-
-          try {
-            const newToken = await refreshAccessToken();
-            setAccessToken(newToken);
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            return api(originalRequest);
-          } catch {
-            setAccessToken(null);
-            setUser(null);
-            return Promise.reject(error);
-          }
-        }
-
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      api.interceptors.request.eject(requestInterceptor);
-      api.interceptors.response.eject(responseInterceptor);
-    };
-  }, [accessToken, refreshAccessToken]);
-
-  useEffect(() => {
+    // Restaura a sessão porque o cookie HttpOnly não pode ser lido pelo JavaScript.
     const initSession = async () => {
       try {
-        const response = await api.post('/auth/refresh');
-        const { accessToken: token, user: refreshedUser } = response.data.data;
-        setAccessToken(token);
-        setUser(refreshedUser);
+        const response = await api.get('/auth/session');
+        setUser(response.data.data.user);
+        await fetchTenant(response.data.data.user.tenantId);
       } catch {
-        setAccessToken(null);
         setUser(null);
+        setTenant(null);
       } finally {
         setIsLoading(false);
       }
@@ -115,26 +74,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initSession();
   }, []);
 
+  // O backend grava o JWT no cookie e retorna apenas os dados públicos do usuário.
   const login = async (email: string, password: string) => {
     const response = await api.post('/auth/login', { email, password });
-    const { accessToken: token, user: loggedUser } = response.data.data;
-    setAccessToken(token);
-    setUser(loggedUser);
+    setUser(response.data.data.user);
+    await fetchTenant(response.data.data.user.tenantId);
   };
 
+  // O backend remove o cookie; o estado local é limpo mesmo se a chamada falhar.
   const logout = async () => {
     try {
       await api.post('/auth/logout');
     } finally {
-      setAccessToken(null);
       setUser(null);
+      setTenant(null);
     }
   };
 
   return (
-    <AuthContext.Provider
-      value={{ user, accessToken, isLoading, login, logout }}
-    >
+    <AuthContext.Provider value={{ user, tenant, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

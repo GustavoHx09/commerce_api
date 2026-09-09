@@ -5,11 +5,12 @@
   "type": "module",
   "main": "src/app.js",
   "scripts": {
-    "dev": "node --watch src/app.js",
-    "start": "node src/app.js",
-    "seed": "node src/database/seed.js",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/shared/database/seed.js",
     "lint": "eslint src",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.js",
     "test:watch": "vitest"
   },
   "keywords": [],
@@ -26,13 +27,13 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
     "morgan": "^1.11.0",
-    "swagger-jsdoc": "^6.3.0",
-    "swagger-ui-express": "^5.0.1"
+    "multer": "^2.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "globals": "^17.11.0",
+    "supertest": "^7.1.0",
     "vitest": "^4.1.11"
   }
 }

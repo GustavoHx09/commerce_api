@@ -64,3 +64,62 @@ Exemplo:
 ```
 Feat(device/:id/status): Rota implementada para verificar se o dispositivo está online ou offline
 ```
+
+## 8. Estrutura de módulos da API
+
+Todo módulo novo deve seguir a estrutura já existente em `packages/api/src/modules/`:
+
+```
+modules/<nome>/
+├── <nome>Model.js        # Schema Mongoose (índices, defaults, soft delete)
+├── <nome>Repo.js         # Acesso ao banco (única camada que fala com o model)
+├── <nome>Service.js      # Regras de negócio e validações de backend
+├── <nome>Controller.js   # Entrada/saída HTTP, sem regra de negócio
+├── <nome>Routes.js       # Definição das rotas e middlewares aplicados
+├── <nome>Validations.js  # Validações reutilizáveis/consultas de unicidade (quando necessário)
+└── __tests__/            # Testes do módulo (ver regra 9)
+```
+
+- Nunca acesse o model diretamente do controller ou de outro módulo; sempre passe pelo repo/service.
+- Rotas novas devem ser registradas em `packages/api/src/routes.js` seguindo o padrão existente.
+
+## 9. Testes obrigatórios
+
+- Toda **nova tabela/schema/módulo** deve vir acompanhada de testes (Vitest) cobrindo no mínimo: validações de entrada, regras de negócio e isolamento por tenant.
+- Toda **nova regra de negócio** adicionada a um módulo existente deve ganhar teste correspondente.
+- Testes ficam em `__tests__/` dentro do próprio módulo, seguindo o padrão `*.test.js`.
+- Antes de entregar qualquer alteração, rodar `npm test -w api` e garantir que nada quebrou.
+
+## 10. Auditoria obrigatória
+
+- Toda operação de escrita em entidades do sistema (**create, update, delete, restore**) deve chamar `auditAction` registrando estado anterior e novo.
+- A auditoria registra quem fez (`actor.id`), o que mudou e quando — não remova essas chamadas ao refatorar services.
+- Consultas de leitura não precisam de auditoria, exceto se a regra de negócio pedir.
+
+## 11. Multi-tenant e segurança
+
+- Toda entidade de negócio pertence a um `tenantId`; queries devem filtrar por tenant (exceto `master`, que acessa tudo).
+- Soft delete é o padrão: usar `deletedAt` em vez de remover registros. Hard delete é exceção e restrito a `master`.
+- Senhas sempre com `bcrypt` e `select: false` no schema; nunca retornar dados sensíveis nas respostas.
+- Alterações que afetem sessão/segurança devem respeitar os mecanismos existentes: blacklist de tokens (logout) e `passwordChangedAt` (revogação ao trocar senha).
+- Novos campos de permissão devem respeitar o array `permissions` do usuário e os helpers em `permissionHelpers.js`.
+
+## 12. Documentação viva
+
+- Ao adicionar rota, módulo, variável de ambiente ou mudança de comportamento, atualize os READMEs afetados (`README.md` raiz, `packages/api/README.md`, `packages/web/README.md`).
+- Marque as fases concluídas no `PLANEJAMENTO.md` conforme o progresso.
+
+## 13. Transações MongoDB
+
+- Use o helper `withTransaction` em operações que precisam ser atômicas (vendas, cancelamentos, ajustes de estoque + financeiro).
+- Sempre repasse a `session` do Mongoose para repositories e `auditAction` envolvidos na mesma transação.
+- Transações exigem um replica set. Em produção use MongoDB Atlas. Para desenvolvimento local, inicie `mongod` com `--replSet rs0` e execute `rs.initiate()` uma vez.
+- O helper pode cair para execução sem transação em ambientes sem replica set, emitindo um aviso. Não desative esse comportamento em produção.
+
+## 14. Ambiente de testes de integração
+
+- Os testes de integração rodam contra o MongoDB local disponibilizado pelo Docker Compose.
+- Para executar os testes de integração, rode: `npm run test:integration -w api`.
+- A configuração está em `packages/api/vitest.integration.config.js`, com `globalSetup` e `setupFiles`.
+- Antes de rodar, certifique-se de que o container está no ar: `docker compose up -d`.
+- O URI padrão é `mongodb://localhost:27017/commerce_api_test?replicaSet=rs0` e pode ser sobrescrito por `MONGO_URI_TEST`.
