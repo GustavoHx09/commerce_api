@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import * as Sentry from "@sentry/node";
 import routes from "./routes.js";
 import { appConfig } from "./shared/config/appConfig.js";
 import { requestLogger, requestLoggerConsole } from "./shared/config/logger.js";
@@ -16,6 +17,16 @@ import { sanitizeMiddleware } from "./shared/middlewares/sanitizeMiddleware.js";
 
 // Carrega variáveis de ambiente do arquivo .env antes de qualquer configuração.
 dotenv.config();
+
+// Inicializa o monitoramento de erros somente quando um DSN foi configurado.
+if (appConfig.sentryDsn) {
+    Sentry.init({
+        dsn: appConfig.sentryDsn,
+        environment: appConfig.nodeEnv,
+        sendDefaultPii: false,
+        tracesSampleRate: 0,
+    });
+}
 
 const app = express();
 
@@ -46,6 +57,14 @@ app.use("/api/v1", routes);
 
 // Handlers de erro e rota não encontrada.
 app.use(notFoundHandler);
+
+// Envia erros inesperados ao Sentry antes de formatar a resposta HTTP.
+if (appConfig.sentryDsn) {
+    Sentry.setupExpressErrorHandler(app, {
+        shouldHandleError: (error) => (error.statusCode || error.status || 500) >= 500,
+    });
+}
+
 app.use(errorHandler);
 
 export default app;

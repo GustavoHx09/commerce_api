@@ -76,6 +76,16 @@ Para parar:
 docker compose down
 ```
 
+### Conectar com MongoDB Compass
+
+Para inspecionar o banco local com o MongoDB Compass, use:
+
+```text
+mongodb://127.0.0.1:27017/commerce_api_dev?replicaSet=rs0&directConnection=true
+```
+
+Use `127.0.0.1` em vez de `localhost` e inclua `directConnection=true` para evitar timeout no replica set de um único nó.
+
 ## Instalação
 
 Na raiz do projeto, instale todas as dependências dos workspaces:
@@ -92,7 +102,8 @@ Para iniciar o backend e o frontend simultaneamente:
 npm run dev
 ```
 
-- API: `http://localhost:3001`
+- API local: `http://localhost:3001`
+- API no Render: `https://sotck-ly.onrender.com`
 - Web: `http://localhost:3000`
 
 ### Rodar separadamente

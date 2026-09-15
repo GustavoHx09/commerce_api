@@ -255,8 +255,8 @@ Escopo mínimo aprovado para os primeiros pilotos, **sem Redis e sem ferramentas
 - [x] HTTPS, cookies seguros, CORS restrito e headers de segurança.
 - [x] Rate limiting por IP, usuário e tenant (em memória; substituir por store compartilhada ao escalar).
 - [x] Logs sem senhas, tokens, CPF/CNPJ completos, endereços ou telefones desnecessários.
-- [ ] Monitoramento de erros, latência, disponibilidade, CPU, memória, disco e conexões do banco (sem ferramenta paga no momento).
-- [ ] Alertas para falhas críticas e indisponibilidade (sem ferramenta paga no momento).
+- [ ] Monitoramento de erros, latência, disponibilidade, CPU, memória, disco e conexões do banco (integração Sentry e health check implementados; configurar Sentry/Render/UptimeRobot em produção).
+- [ ] Alertas para falhas críticas e indisponibilidade (configurar email e webhook do Discord no Sentry/UptimeRobot após o deploy).
 - [x] Backup e restauração documentados com `mongodump`/`mongorestore` para desenvolvimento/estágio inicial.
 - [ ] Backup automático point-in-time em produção (depende de provedor gerenciado pago; adiar até primeiro cliente-piloto definido).
 - [x] Teste documentado de restauração de backup (comandos descritos no README da API).

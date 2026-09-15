@@ -8,16 +8,12 @@ export const getHealth = async (req, res) => {
     if (!isConnected) {
         return res.status(503).json({
             status: "unavailable",
-            database: "disconnected",
-            uptime: process.uptime(),
             timestamp: new Date().toISOString(),
         });
     }
 
     res.status(200).json({
         status: "ok",
-        database: "connected",
-        uptime: process.uptime(),
         timestamp: new Date().toISOString(),
     });
 };

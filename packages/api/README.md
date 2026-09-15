@@ -42,6 +42,7 @@ cp .env.example .env
 | Variável | Descrição | Obrigatório |
 | --- | --- | --- |
 | `MONGO_URI` | URI de conexão com o MongoDB. Localmente, use o Docker Compose (`docker compose up -d`), que já sobe o replica set `rs0`. | Sim |
+| `SENTRY_DSN` | DSN opcional do projeto Sentry usado para monitorar erros inesperados | Não |
 | `JWT_SECRET` | Chave secreta para assinatura do JWT | Sim |
 | `JWT_EXPIRES_IN` | Tempo de expiração do JWT (padrão: `7d`) | Não |
 | `CORS_URL` | Origens permitidas pelo CORS (padrão: `http://localhost:3000`) | Não |
@@ -74,6 +75,28 @@ npm run dev
 ```
 
 A API estará disponível em `http://localhost:3001`.
+
+## Monitoramento e alertas
+
+A API expõe `GET /api/v1/health` sem autenticação. O endpoint verifica internamente a conexão com o MongoDB e retorna somente `status` e `timestamp`, sem revelar detalhes da infraestrutura.
+
+Em produção, configure no Render:
+
+```env
+SENTRY_DSN=<dsn-do-projeto-sentry>
+NODE_ENV=production
+```
+
+O Sentry recebe erros inesperados da API sem envio padrão de informações pessoais. O DSN real deve permanecer apenas nas variáveis de ambiente locais e do Render.
+
+Para monitorar disponibilidade no UptimeRobot:
+
+1. Crie um monitor HTTP(S) para `https://sotck-ly.onrender.com/api/v1/health`.
+2. Considere `200` como saudável; o endpoint retorna `503` se o MongoDB estiver desconectado.
+3. Cadastre os contatos de alerta por email.
+4. Adicione a integração por webhook do Discord no painel do serviço de monitoramento.
+
+CPU, memória, reinicializações e logs devem ser acompanhados pelo painel do Render. Conexões e consumo do banco devem ser acompanhados pelo painel do MongoDB Atlas.
 
 ## Scripts
 
@@ -162,6 +185,16 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 - Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações
 - Soft delete e índices de unicidade parciais por tenant
 - Comentários explicativos padronizados no código
+
+## Conexão com MongoDB Compass
+
+Para inspecionar o banco de desenvolvimento com o MongoDB Compass, use a URI abaixo:
+
+```text
+mongodb://127.0.0.1:27017/commerce_api_dev?replicaSet=rs0&directConnection=true
+```
+
+O parâmetro `directConnection=true` evita timeout, pois o replica set local do Docker tem apenas um nó.
 
 ## Testes
 
