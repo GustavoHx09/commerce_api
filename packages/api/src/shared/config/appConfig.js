@@ -11,6 +11,11 @@ export const appConfig = {
         return process.env.JWT_SECRET;
     },
 
+    // DSN opcional usado para enviar erros da API ao Sentry.
+    get sentryDsn() {
+        return process.env.SENTRY_DSN;
+    },
+
     // Tempo de duração da sessão JWT armazenada no cookie.
     get jwtExpiresIn() {
         return process.env.JWT_EXPIRES_IN || "7d";
