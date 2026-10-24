@@ -146,12 +146,12 @@ Objetivo: impedir retrabalho estrutural e garantir que uma empresa nunca acesse 
 - [x] Criar módulo de empresas/tenants robusto, com CNPJ, endereço, status e configurações.
 - [x] Usar um único frontend multitenancy, sem cópias personalizadas por cliente.
 - [x] Permitir nome de exibição, logo e cores por tenant, com validação de formato e tamanho da imagem.
-- [x] Armazenar logos em object storage; não aceitar CSS ou JavaScript fornecido pelo cliente.
+- [x] Armazenar logos em object storage (compatível com S3/R2/MinIO, com fallback em disco local para desenvolvimento); não aceitar CSS ou JavaScript fornecido pelo cliente.
 - [x] Refinar usuários, roles e permissões granulares com menor privilégio.
 - [x] Adicionar audit trail para operações sensíveis.
 - [x] Padronizar soft delete e garantir preservação de histórico.
 - [x] Reforçar autenticação, expiração e revogação de sessões.
-- [ ] Implementar recuperação de senha com envio de email e token temporário.
+- [ ] Implementar recuperação de senha com envio de email e token temporário (backend + telas de forgot/reset prontos com Resend; falta apenas criar a conta e configurar `RESEND_API_KEY`/`EMAIL_FROM`/`WEB_URL`).
 - [x] Manter segredos fora do código e separar desenvolvimento, homologação e produção.
 
 ### Fase 2 — Catálogo, estoque e pessoas (concluído; extensão 2.1 em andamento)
@@ -165,9 +165,9 @@ Objetivo: entregar a base operacional necessária para registrar produtos e rela
 - [x] Clientes.
 - [x] Fornecedores.
 - [x] Paginação, filtros e índices para as consultas principais.
-- [x] Sistema de presets de permissões (backend concluído; painel do frontend na fase de UI).
+- [x] Sistema de presets de permissões (backend + painel de autorizações no frontend).
 
-#### Fase 2.1 — Presets de permissões e painel de autorizações (em andamento — backend concluído, frontend pendente)
+#### Fase 2.1 — Presets de permissões e painel de autorizações (concluído)
 
 Objetivo: permitir que o admin de cada empresa gerencie as autorizações dos operadores por meio de presets reutilizáveis e ajustes individuais.
 
@@ -261,7 +261,7 @@ Escopo mínimo aprovado para os primeiros pilotos, **sem Redis e sem ferramentas
 - [ ] Backup automático point-in-time em produção (depende de provedor gerenciado pago; adiar até primeiro cliente-piloto definido).
 - [x] Teste documentado de restauração de backup (comandos descritos no README da API).
 - [x] Dockerfile e CI com testes unitários/integração.
-- [ ] Documento de deploy e rollback detalhado para produção.
+- [x] Documento de deploy e rollback detalhado para produção (`DEPLOY.md` — Render + MongoDB Atlas).
 - [ ] Testes de carga com cenários reais e correção de consultas lentas.
 - [ ] Definir RPO e RTO iniciais de acordo com custo e necessidade dos clientes-piloto.
 
@@ -363,11 +363,11 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 
 ### Próximos passos
 
-1. Implementar recuperação de senha (envio de email/token).
-2. Implementar painel frontend de presets de permissões e permissões por usuário.
+1. Ativar recuperação de senha: backend e telas de forgot/reset prontos (Resend + token de uso único); falta criar a conta no Resend e configurar `RESEND_API_KEY`/`EMAIL_FROM`/`WEB_URL`.
+2. [x] Implementar painel frontend de presets de permissões e permissões por usuário (`/permissions`).
 3. [x] Adicionar testes de integração/autorização entre tenants e endpoints (Fase 4).
 4. [x] Aplicar proteções de segurança restantes: rate limiting por IP/usuário/tenant, logs sem dados sensíveis, headers de segurança e revisão básica de upload.
-5. Preparar documento de deploy e rollback detalhado para produção (Render + MongoDB Atlas).
+5. [x] Documento de deploy e rollback detalhado para produção (`DEPLOY.md` — Render + MongoDB Atlas).
 6. Concluir definições comerciais e jurídicas da Fase 5 antes de vender amplamente.
 
 ## 10. Critérios mínimos para liberar clientes-piloto

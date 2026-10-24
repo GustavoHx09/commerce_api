@@ -19,6 +19,7 @@ commerce_api/
 │   └── web/          # Frontend Next.js
 ├── package.json      # Workspaces + scripts centralizados
 ├── README.md
+├── DEPLOY.md         # Guia de deploy e rollback (Render + MongoDB Atlas)
 └── .gitignore
 ```
 
@@ -178,6 +179,12 @@ packages/web/
 - PDV, caixa e pagamentos com baixa/estorno atômico de estoque via transações do MongoDB
 - Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações
 - Comentários explicativos padronizados no código, documentando funções e configurações
+- Uploads em object storage compatível com S3 (AWS S3, Cloudflare R2, MinIO) com fallback para disco local em desenvolvimento
+- Recuperação de senha via Resend com token de uso único (ativada ao configurar `RESEND_API_KEY`)
+
+## Deploy
+
+O guia completo de deploy em produção (Render + MongoDB Atlas + object storage) e o procedimento de rollback estão em [DEPLOY.md](./DEPLOY.md).
 
 ## Licença
 
