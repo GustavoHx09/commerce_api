@@ -276,14 +276,16 @@ export const restoreTenantService = async (id, actorId) => {
     return restoredTenant;
 };
 
-// Faz upload da logo da empresa, salva em disco e atualiza o tenant.
+// Faz upload da logo da empresa no storage configurado (S3/R2/MinIO ou disco local)
+// e atualiza o tenant com a URL pública resultante.
 export const uploadTenantLogoService = async (id, file, baseUrl, actorId) => {
     if (!file) {
         throwValidationError("Nenhuma imagem enviada");
     }
 
-    const { relativePath } = saveLogoFile(id, file.buffer, file.mimetype);
-    const logoUrl = `${baseUrl}/${relativePath}`;
+    const { key, publicUrl } = await saveLogoFile(id, file.buffer, file.mimetype);
+    // No provedor local a URL pública é servida pela rota estática /uploads da própria API.
+    const logoUrl = publicUrl || `${baseUrl}/${key}`;
 
     const tenant = await getTenantByIdRepo(id);
 

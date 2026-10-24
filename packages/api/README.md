@@ -136,6 +136,26 @@ O logout remove o cookie do navegador e adiciona o hash do token atual à blackl
 
 Sessões também são revogadas automaticamente quando a senha do usuário é alterada: tokens emitidos antes da troca passam a ser rejeitados pelo middleware de autenticação.
 
+### Recuperação de senha (estrutura pronta, envio pendente)
+
+O fluxo de recuperação de senha já está implementado e usa o **Resend** para envio de emails:
+
+```bash
+POST /api/v1/auth/forgot-password
+{ "email": "usuario@loja.com" }
+```
+
+A resposta é sempre a mesma, existindo ou não o email, para não revelar contas cadastradas. Quando o email existe, é gerado um token aleatório de uso único (válido por 60 minutos); somente o hash SHA-256 fica salvo na coleção `passwordResetTokens`, e o link enviado aponta para `WEB_URL/reset-password?token=...`.
+
+```bash
+POST /api/v1/auth/reset-password
+{ "token": "<token-do-email>", "password": "novaSenha123" }
+```
+
+A redefinição atualiza `passwordChangedAt`, revogando todas as sessões anteriores do usuário.
+
+> **Atenção:** enquanto `RESEND_API_KEY` estiver vazia no `.env`, os envios são ignorados (a API registra um aviso no console e continua respondendo normalmente). Para ativar, crie a conta no [Resend](https://resend.com), verifique o domínio e configure `RESEND_API_KEY`, `EMAIL_FROM` e `WEB_URL`.
+
 ## Roles
 
 - `master` → acesso total, gerencia tenants
@@ -148,7 +168,7 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 
 | Prefixo | O que faz |
 | --- | --- |
-| `/auth` | Login, logout e consulta de sessão |
+| `/auth` | Login, logout, consulta de sessão e recuperação de senha |
 | `/users` | CRUD de usuários, roles e permissões |
 | `/permission-presets` | Presets reutilizáveis de permissões (globais ou por tenant) |
 | `/tenants` | Cadastro e gerenciamento de empresas |

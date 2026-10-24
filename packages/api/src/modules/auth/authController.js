@@ -1,4 +1,5 @@
 import { authenticateUser, revokeToken } from "./authService.js";
+import { requestPasswordReset, resetPassword } from "./passwordResetService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
 
 // Nome do cookie HttpOnly que mantém a sessão autenticada no navegador.
@@ -47,4 +48,23 @@ export const logout = async (req, res) => {
     res.clearCookie(AUTH_COOKIE, getAuthCookieOptions(false));
 
     return successResponse(res, null, "Logout realizado com sucesso");
+};
+
+// Inicia o fluxo de recuperação de senha. A resposta é sempre a mesma,
+// independente do email existir, para não revelar contas cadastradas.
+export const forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    await requestPasswordReset(email);
+
+    return successResponse(res, null, "Se o email estiver cadastrado, enviaremos as instruções de recuperação");
+};
+
+// Redefine a senha do usuário a partir do token enviado por email.
+export const resetPasswordController = async (req, res) => {
+    const { token, password } = req.body;
+
+    await resetPassword(token, password);
+
+    return successResponse(res, null, "Senha redefinida com sucesso");
 };
