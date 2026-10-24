@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 
@@ -66,6 +67,12 @@ export default function LoginPage() {
           {error && (
             <p className="text-sm text-red-600">{error}</p>
           )}
+
+          <p className="text-right text-sm">
+            <Link href="/forgot-password" className="text-blue-600 hover:underline">
+              Esqueci minha senha
+            </Link>
+          </p>
 
           <button
             type="submit"

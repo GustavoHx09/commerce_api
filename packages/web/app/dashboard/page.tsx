@@ -111,12 +111,22 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <button
-          onClick={logout}
-          className="rounded-md bg-red-600 px-4 py-2 text-white transition hover:bg-red-700"
-        >
-          Sair
-        </button>
+        <div className="flex gap-2">
+          {(user.role === 'admin' || user.role === 'master') && (
+            <button
+              onClick={() => router.push('/permissions')}
+              className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition hover:bg-gray-100"
+            >
+              Permissões
+            </button>
+          )}
+          <button
+            onClick={logout}
+            className="rounded-md bg-red-600 px-4 py-2 text-white transition hover:bg-red-700"
+          >
+            Sair
+          </button>
+        </div>
       </div>
 
       <p className="mb-6 text-lg text-gray-700">

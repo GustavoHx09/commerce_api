@@ -22,9 +22,12 @@ Frontend da plataforma de e-commerce, construído com Next.js, React, TypeScript
 ```
 packages/web/
 ├── app/           # App Router do Next.js
-│   ├── context/   # Contextos globais (AuthContext)
-│   ├── login/     # Página de login
-│   └── dashboard/ # Página protegida do painel
+│   ├── context/          # Contextos globais (AuthContext)
+│   ├── login/            # Página de login
+│   ├── forgot-password/  # Solicitação de recuperação de senha
+│   ├── reset-password/   # Redefinição de senha via token do email
+│   ├── permissions/      # Painel de autorizações (presets e permissões por usuário)
+│   └── dashboard/        # Página protegida do painel
 ├── lib/           # Clientes e utilitários (axios)
 ├── types/         # Declarações de tipos globais
 ├── .env           # Variáveis de ambiente
