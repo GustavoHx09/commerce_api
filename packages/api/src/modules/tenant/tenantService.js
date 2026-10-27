@@ -10,7 +10,7 @@ import {
     restoreTenantRepo,
 } from "./tenantRepo.js";
 import { isEmpty, isValid, generateSlug, isValidDocument, isValidPhone, cepIsValid, emailIsValid, formatDocument } from "../../shared/utils/fieldsValidations.js";
-import { throwValidationError, validateRequired } from "../../shared/utils/serviceHelpers.js";
+import { throwValidationError, validateRequired, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { saveLogoFile } from "../../shared/utils/upload/storageService.js";
 import { auditAction } from "../audit/auditHelpers.js";
@@ -20,7 +20,10 @@ const addressFields = ["number", "street", "neighborhood", "zipCode", "complemen
 const planLimits = { free: 2, basic: 10, pro: 100 };
 
 // Campos que a própria empresa pode alterar através de /tenants/me.
-const ownTenantEditableFields = ["name", "displayName", "phone", "email", "address", "logoUrl", "colors"];
+const ownTenantEditableFields = ["name", "displayName", "phone", "email", "address", "logoUrl", "colors", "paymentFees", "cashierMode"];
+
+// Modos válidos de operação do caixa configuráveis por tenant.
+const validCashierModes = ["per_operator", "shared"];
 
 // Valida uma cor no formato hexadecimal de 6 dígitos.
 const isValidHexColor = (color) => {
@@ -85,6 +88,10 @@ const validateTenantData = async (data, currentTenant = null) => {
     if (data.plan && !["free", "basic", "pro"].includes(data.plan)) {
         throwValidationError("Plano inválido", 422);
     }
+
+    if (data.cashierMode !== undefined && !validCashierModes.includes(data.cashierMode)) {
+        throwValidationError("Modo de caixa inválido", 422);
+    }
 };
 
 // Gera um slug único a partir do nome, adicionando sufixo numérico se necessário.
@@ -132,7 +139,7 @@ export const getTenantsService = async (query = {}) => {
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
             { slug: { $regex: term, $options: "i" } },
         ];
     }
@@ -242,6 +249,52 @@ const validateOwnTenantData = (data) => {
 
     if (data.logoUrl !== undefined && !isValidLogoUrl(data.logoUrl)) {
         throwValidationError("URL do logo inválida. Deve ser uma imagem (png, jpg, svg, webp) em http/https", 422);
+    }
+
+    if (data.paymentFees !== undefined) {
+        validatePaymentFees(data.paymentFees);
+    }
+
+    if (data.cashierMode !== undefined && !validCashierModes.includes(data.cashierMode)) {
+        throwValidationError("Modo de caixa inválido. Use per_operator ou shared", 422);
+    }
+};
+
+// Valida a estrutura de taxas de pagamento: percentuais entre 0 e 100 e
+// parcelas únicas entre 1 e 48 com juros não negativos.
+const validatePaymentFees = (fees) => {
+    if (!fees || typeof fees !== "object") {
+        throwValidationError("Taxas de pagamento inválidas", 422);
+    }
+
+    for (const key of ["pixPercent", "debitPercent"]) {
+        const value = Number(fees[key] ?? 0);
+        if (isNaN(value) || value < 0 || value > 100) {
+            throwValidationError(`Taxa ${key} deve ser um percentual entre 0 e 100`, 422);
+        }
+    }
+
+    if (fees.creditInstallments !== undefined) {
+        if (!Array.isArray(fees.creditInstallments)) {
+            throwValidationError("creditInstallments deve ser uma lista", 422);
+        }
+
+        const seen = new Set();
+        for (const entry of fees.creditInstallments) {
+            const installments = Number(entry?.installments);
+            const interest = Number(entry?.interestPercent);
+
+            if (!Number.isInteger(installments) || installments < 1 || installments > 48) {
+                throwValidationError("Parcelas devem ser inteiras entre 1 e 48", 422);
+            }
+            if (isNaN(interest) || interest < 0 || interest > 100) {
+                throwValidationError("Juros da parcela deve ser um percentual entre 0 e 100", 422);
+            }
+            if (seen.has(installments)) {
+                throwValidationError(`Parcela ${installments}x duplicada na configuração`, 422);
+            }
+            seen.add(installments);
+        }
     }
 };
 

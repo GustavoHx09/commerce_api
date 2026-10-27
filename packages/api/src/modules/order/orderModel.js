@@ -61,6 +61,18 @@ const orderSchema = new mongoose.Schema({
         ref: "customers",
     },
 
+    // Número sequencial da venda dentro do tenant (1, 2, 3...), exibido ao usuário.
+    orderNumber: {
+        type: Number,
+        index: true,
+    },
+
+    // Número do documento fiscal (NFC-e/NF-e) quando a emissão for implementada.
+    fiscalNumber: {
+        type: String,
+        trim: true,
+    },
+
     cashierId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "cashiers",
@@ -143,5 +155,10 @@ const orderSchema = new mongoose.Schema({
 
 orderSchema.index({ tenantId: 1, cashierId: 1, status: 1 });
 orderSchema.index({ tenantId: 1, customerId: 1 });
+// Numeração sequencial única por tenant; sparse tolera pedidos antigos sem número.
+orderSchema.index(
+    { tenantId: 1, orderNumber: 1 },
+    { unique: true, partialFilterExpression: { orderNumber: { $type: "number" } } }
+);
 
 export default mongoose.model("orders", orderSchema);

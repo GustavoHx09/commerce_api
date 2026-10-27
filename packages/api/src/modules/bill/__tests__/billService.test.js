@@ -20,9 +20,26 @@ vi.mock('../billRepo.js', () => ({
     restoreBillRepo: (...args) => mockRestoreBillRepo(...args),
 }));
 
+const mockGetCashierByIdRepo = vi.fn();
+const mockCalculateCashierBalance = vi.fn();
+const mockCreateSystemCashierMovement = vi.fn();
+
 vi.mock('../../audit/auditHelpers.js', () => ({
     auditAction: (...args) => mockAuditAction(...args),
     toPlain: (doc) => doc,
+}));
+
+vi.mock('../../../shared/utils/transactionHelpers.js', () => ({
+    withTransaction: async (callback) => callback({}),
+}));
+
+vi.mock('../../cashier/cashierRepo.js', () => ({
+    getCashierByIdRepo: (...args) => mockGetCashierByIdRepo(...args),
+}));
+
+vi.mock('../../cashier/cashierService.js', () => ({
+    calculateCashierBalance: (...args) => mockCalculateCashierBalance(...args),
+    createSystemCashierMovement: (...args) => mockCreateSystemCashierMovement(...args),
 }));
 
 describe('billService', () => {
@@ -92,24 +109,61 @@ describe('billService', () => {
     });
 
     describe('payBillService', () => {
-        it('pays a pending bill', async () => {
-            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+        it('pays a pending bill fully external when no cashier is informed', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', type: 'pay', status: 'pending', amount: 100, description: 'Aluguel' });
             mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
 
-            const result = await payBillService('b1', 'tenantA', 'u1');
+            const result = await payBillService('b1', {}, 'tenantA', 'u1');
 
             expect(result.status).toBe('paid');
             expect(mockUpdateBillRepo).toHaveBeenCalledWith(
                 'b1',
-                { status: 'paid', paidAt: expect.any(Date) },
-                'tenantA'
+                expect.objectContaining({ status: 'paid', cashierAmount: 0, externalAmount: 100 }),
+                'tenantA',
+                { session: {} }
             );
+            expect(mockCreateSystemCashierMovement).not.toHaveBeenCalled();
+        });
+
+        it('pays part from the cashier and part externally', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', type: 'pay', status: 'pending', amount: 100, description: 'Fornecedor' });
+            mockGetCashierByIdRepo.mockResolvedValue({ _id: 'c1', status: 'open' });
+            mockCalculateCashierBalance.mockResolvedValue(80);
+            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
+
+            const result = await payBillService('b1', {
+                cashierId: 'c1',
+                externalAmount: 30,
+                externalMethod: 'pix',
+            }, 'tenantA', 'u1');
+
+            expect(result.status).toBe('paid');
+            expect(mockCreateSystemCashierMovement).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'pagamento_conta', amount: 70, billId: 'b1' }),
+                'u1',
+                { session: {} }
+            );
+            expect(mockUpdateBillRepo).toHaveBeenCalledWith(
+                'b1',
+                expect.objectContaining({ cashierAmount: 70, externalAmount: 30, externalMethod: 'pix' }),
+                'tenantA',
+                { session: {} }
+            );
+        });
+
+        it('rejects when cashier balance is insufficient', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', type: 'pay', status: 'pending', amount: 100, description: 'Fornecedor' });
+            mockGetCashierByIdRepo.mockResolvedValue({ _id: 'c1', status: 'open' });
+            mockCalculateCashierBalance.mockResolvedValue(50);
+
+            await expect(payBillService('b1', { cashierId: 'c1' }, 'tenantA', 'u1'))
+                .rejects.toMatchObject({ statusCode: 409 });
         });
 
         it('rejects paying a non-pending bill', async () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
 
-            await expect(payBillService('b1', 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+            await expect(payBillService('b1', {}, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
         });
     });
 

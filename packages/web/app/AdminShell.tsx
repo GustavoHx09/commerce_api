@@ -19,15 +19,11 @@ export const navigation = [
   {
     title: 'Cadastros',
     items: [
-      ['/management/products', 'Produtos', 'PR'],
+      ['/management/products', 'Estoque', 'ES'],
       ['/management/customers', 'Clientes', 'CL'],
       ['/management/suppliers', 'Fornecedores', 'FR'],
       ['/management/users', 'Funcionários', 'FN'],
     ],
-  },
-  {
-    title: 'Estoque',
-    items: [['/management/movements', 'Movimentações e inventário', 'MV']],
   },
   {
     title: 'Financeiro',
@@ -41,7 +37,7 @@ export const navigation = [
     title: 'Gestão',
     items: [
       ['/management/reports', 'Relatórios', 'RL'],
-      ['/permissions', 'Equipe e permissões', 'AC'],
+
       ['/management/company', 'Minha empresa', 'EM'],
       ['/management/audit', 'Auditoria', 'AU'],
       ['/management/exports', 'Exportações', 'EX'],

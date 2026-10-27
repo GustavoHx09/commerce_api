@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
-// Movimentações financeiras de caixa: suprimento (reforço) e sangria (retirada).
+// Movimentações financeiras de caixa registradas em tempo real:
+// suprimento/sangria (manuais), venda/estorno (PDV) e pagamento/recebimento de contas.
 const cashierMovementSchema = new mongoose.Schema({
     cashierId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -18,10 +19,23 @@ const cashierMovementSchema = new mongoose.Schema({
 
     type: {
         type: String,
-        enum: ["suprimento", "sangria"],
+        enum: ["suprimento", "sangria", "venda", "estorno", "pagamento_conta", "recebimento_conta"],
         required: true,
     },
 
+    // Referência à venda quando a movimentação vem do PDV (venda/estorno).
+    orderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "orders",
+    },
+
+    // Referência à conta quando a movimentação vem de contas a pagar/receber.
+    billId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "bills",
+    },
+
+    // Valor sempre positivo; a direção (entrada/saída) é definida pelo tipo.
     amount: {
         type: Number,
         required: true,

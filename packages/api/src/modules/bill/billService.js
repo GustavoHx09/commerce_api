@@ -12,6 +12,9 @@ import { validateRequired, throwValidationError } from "../../shared/utils/servi
 import { isValidDate } from "../../shared/utils/fieldsValidations.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
+import { withTransaction } from "../../shared/utils/transactionHelpers.js";
+import { getCashierByIdRepo } from "../cashier/cashierRepo.js";
+import { calculateCashierBalance, createSystemCashierMovement } from "../cashier/cashierService.js";
 
 const VALID_TYPES = ["pay", "receive"];
 const VALID_STATUSES = ["pending", "paid", "cancelled"];
@@ -131,27 +134,95 @@ export const updateBillService = async (id, data, tenantId, actorId) => {
     return bill;
 };
 
-// Marca uma conta como paga.
-export const payBillService = async (id, tenantId, actorId) => {
-    const previous = await getBillByIdRepo(id, tenantId, false);
+const VALID_EXTERNAL_METHODS = ["cash", "pix", "credit_card", "debit_card", "other"];
 
-    if (!previous) {
-        throwValidationError("Conta nao encontrada", 404);
-    }
+// Marca uma conta como paga/recebida.
+// Aceita liquidação combinada: parte sai do caixa aberto informado (cashierId +
+// cashierAmount) e o restante é pago por fora (externalAmount + externalMethod,
+// usado apenas como identificador para auditoria). Sem cashierId, a conta é
+// liquidada totalmente por fora e o caixa não é movimentado.
+export const payBillService = async (id, data = {}, tenantId, actorId) => {
+    return withTransaction(async (session) => {
+        const previous = await getBillByIdRepo(id, tenantId, false);
 
-    if (previous.status !== "pending") {
-        throwValidationError("Apenas contas pendentes podem ser pagas/recebidas", 409);
-    }
+        if (!previous) {
+            throwValidationError("Conta nao encontrada", 404);
+        }
 
-    const bill = await updateBillRepo(
-        id,
-        { status: "paid", paidAt: new Date() },
-        tenantId
-    );
+        if (previous.status !== "pending") {
+            throwValidationError("Apenas contas pendentes podem ser pagas/recebidas", 409);
+        }
 
-    await auditAction("bill", "update", previous, bill, actorId);
+        const total = Number(previous.amount);
+        let cashierAmount = 0;
+        let externalAmount = 0;
+        let externalMethod = null;
+        let cashier = null;
 
-    return bill;
+        if (data.cashierId) {
+            cashier = await getCashierByIdRepo(data.cashierId, tenantId, false, { session });
+
+            if (!cashier) {
+                throwValidationError("Caixa nao encontrado", 404);
+            }
+            if (cashier.status !== "open") {
+                throwValidationError("O caixa informado esta fechado", 409);
+            }
+
+            externalAmount = Number(data.externalAmount || 0);
+            if (isNaN(externalAmount) || externalAmount < 0 || externalAmount >= total) {
+                throwValidationError("O valor externo deve ser maior ou igual a zero e menor que o total da conta");
+            }
+
+            cashierAmount = total - externalAmount;
+
+            if (externalAmount > 0) {
+                if (!VALID_EXTERNAL_METHODS.includes(data.externalMethod)) {
+                    throwValidationError("Informe o identificador do pagamento externo");
+                }
+                externalMethod = data.externalMethod;
+            }
+
+            // Regra de segurança do caixa: o valor retirado nunca pode exceder o saldo atual.
+            const balance = await calculateCashierBalance(cashier, session);
+            if (cashierAmount > balance) {
+                throwValidationError("Saldo do caixa insuficiente para esta operacao", 409);
+            }
+
+            // Contas a pagar retiram dinheiro; contas a receber colocam dinheiro.
+            await createSystemCashierMovement({
+                cashierId: cashier._id,
+                tenantId,
+                type: previous.type === "pay" ? "pagamento_conta" : "recebimento_conta",
+                amount: cashierAmount,
+                reason: `${previous.type === "pay" ? "Pagamento" : "Recebimento"} da conta: ${previous.description}`,
+                billId: previous._id,
+            }, actorId, { session });
+        } else {
+            externalAmount = total;
+            if (data.externalMethod && VALID_EXTERNAL_METHODS.includes(data.externalMethod)) {
+                externalMethod = data.externalMethod;
+            }
+        }
+
+        const bill = await updateBillRepo(
+            id,
+            {
+                status: "paid",
+                paidAt: new Date(),
+                cashierId: cashier?._id || null,
+                cashierAmount,
+                externalAmount,
+                externalMethod,
+            },
+            tenantId,
+            { session }
+        );
+
+        await auditAction("bill", "update", previous, bill, actorId, { session });
+
+        return bill;
+    });
 };
 
 // Cancela uma conta sem apagar o historico.

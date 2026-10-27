@@ -90,6 +90,9 @@ const validateUpdate = async (data, product, tenantId) => {
     if (data.name === "") throwValidationError("O nome do produto é obrigatório");
     if (data.sku === "") throwValidationError("O SKU do produto é obrigatório");
 
+    // O criador do registro não pode ser alterado em edições.
+    delete data.createdBy;
+
     ensureNoDirectStockChange(data);
     sanitizeNumberFields(data, numericFields);
 
@@ -123,6 +126,7 @@ const validateUpdate = async (data, product, tenantId) => {
 export const createProductService = async (data, tenantId, actorId) => {
     await validateCreate(data, tenantId);
     data.tenantId = tenantId;
+    data.createdBy = actorId;
 
     const product = await createProductRepo(data);
 

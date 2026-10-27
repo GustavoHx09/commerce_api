@@ -10,6 +10,7 @@ export const getOrdersRepo = (filter, skip, limit, sort) =>
     orders.find(filter).skip(skip).limit(limit).sort(sort)
         .populate("customerId", "name document")
         .populate("cashierId", "openedBy status")
+        .populate("createdBy", "name")
         .populate("paymentIds");
 
 export const countOrdersRepo = (filter) => orders.countDocuments(filter);
@@ -19,6 +20,7 @@ export const getOrderByIdRepo = (id, tenantId, includeDeleted = false, { session
         .session(session)
         .populate("customerId", "name document")
         .populate("cashierId", "openedBy status")
+        .populate("createdBy", "name")
         .populate("paymentIds");
 
 export const updateOrderRepo = (id, data, tenantId, { session } = {}) =>
@@ -26,7 +28,7 @@ export const updateOrderRepo = (id, data, tenantId, { session } = {}) =>
 
 export const getPaidOrdersTotalByCashier = async (cashierId, tenantId, { session } = {}) => {
     const result = await orders.aggregate([
-        { $match: { cashierId, tenantId, status: "paid", deletedAt: null } },
+        { $match: { cashierId, ...baseQuery(tenantId, false), status: "paid" } },
         { $group: { _id: null, total: { $sum: "$total" } } },
     ]).session(session);
 

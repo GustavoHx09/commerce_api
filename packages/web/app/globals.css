@@ -1,3 +1,140 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :focus-visible {
+    @apply outline outline-2 outline-offset-4 outline-blue-500;
+  }
+}
+
+@layer components {
+  .admin-input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+  }
+  .admin-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .admin-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .admin-panel {
+    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+  }
+  .admin-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+}
+
+.sidebar-scroll {
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 #020617;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: #020617;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 1px solid #020617;
+  border-radius: 999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+.sidebar-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .sidebar-scroll {
+    scrollbar-color: auto;
+  }
+}
+
+/* Barra de rolagem estilizada para modais e áreas com rolagem interna. */
+.modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  overscroll-behavior: contain;
+}
+.modal-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+.modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Área usada apenas na impressão (cupom, relatórios e auditoria). */
+.print-area {
+  display: none;
+}
+
+@media print {
+  /* Na impressão mostra apenas o conteúdo marcado para impressão. */
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    color: #000;
+    padding: 0;
+    margin: 0;
+  }
+  /* Layout de cupom não fiscal em bobina de 80mm. */
+  .receipt {
+    width: 72mm;
+    margin: 0 auto;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 4mm 2mm;
+  }
+  .receipt h1 {
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 2mm;
+  }
+  .receipt .receipt-center {
+    text-align: center;
+  }
+  .receipt .receipt-line {
+    border-top: 1px dashed #000;
+    margin: 2mm 0;
+  }
+  .receipt table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .receipt td {
+    padding: 1px 0;
+    vertical-align: top;
+  }
+  .receipt .receipt-right {
+    text-align: right;
+  }
+  .receipt .receipt-total {
+    font-size: 14px;
+    font-weight: bold;
+  }
+}

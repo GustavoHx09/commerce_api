@@ -10,7 +10,7 @@ import {
 } from "./customerRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isValidDocument, formatDocument, isValidPhone, emailIsValid, cepIsValid } from "../../shared/utils/fieldsValidations.js";
-import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { validateRequired, throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 import { countOrdersByCustomerRepo } from "../order/orderRepo.js";
@@ -134,7 +134,7 @@ export const createCustomerService = async (data, tenantId, actorId) => {
         throwValidationError("Documento já cadastrado para este cliente", 409);
     }
 
-    const customer = await createCustomerRepo({ ...validated, tenantId });
+    const customer = await createCustomerRepo({ ...validated, tenantId, createdBy: actorId });
 
     await auditAction("customer", "create", null, customer, actorId);
 
@@ -147,14 +147,22 @@ export const getCustomersService = async (query, tenantId, includeDeleted = fals
 
     const filter = { ...baseQuery(tenantId, includeDeleted) };
 
-    if (query.isActive !== undefined) {
+    // Visão da listagem ("view") igual à de produtos: active (padrão),
+    // inactive ou all. O parâmetro legado isActive continua aceito.
+    if (query.view === "all") {
+        // Todos: sem filtro de situação.
+    } else if (query.view === "inactive") {
+        filter.isActive = false;
+    } else if (query.isActive !== undefined) {
         filter.isActive = query.isActive === "true";
+    } else {
+        filter.isActive = true;
     }
 
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
             { document: { $regex: term, $options: "i" } },
             { email: { $regex: term, $options: "i" } },
         ];
@@ -180,6 +188,9 @@ export const updateCustomerService = async (id, data, tenantId, actorId) => {
     }
 
     const update = validateUpdate(data, previous);
+
+    // O criador do registro não pode ser alterado em edições.
+    delete update.createdBy;
 
     if (update.document) {
         const existing = await getCustomerByDocument(update.document, tenantId);

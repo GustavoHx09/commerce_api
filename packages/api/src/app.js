@@ -39,7 +39,11 @@ const allowedOrigins = appConfig.corsUrl.split(",").map((url) => url.trim()).fil
 
 // Aplica middlewares de segurança e parsing.
 app.use(securityHeaders);         // Adiciona headers de segurança (Helmet).
-app.use(rateLimiter);             // Limita requisições por IP.
+// Em desenvolvimento o limiter por IP é desligado: a SPA e o Strict Mode do
+// React geram requisições demais do mesmo IP local durante o uso normal.
+if (appConfig.nodeEnv !== "development") {
+    app.use(rateLimiter);         // Limita requisições por IP (backstop).
+}
 app.use(cors({ origin: allowedOrigins, credentials: true })); // Permite CORS com cookies.
 app.use(createOriginMiddleware(allowedOrigins)); // Bloqueia escritas iniciadas por outros sites.
 app.use(cookieParser());          // Habilita leitura de cookies nas requisições.
@@ -50,7 +54,12 @@ app.use(express.urlencoded({ extended: true })); // Habilita parsing de formulá
 app.use(sanitizeMiddleware);        // Remove caracteres proibidos para evitar NoSQL injection.
 
 // Serve arquivos estáticos de upload (logos). Em produção deve virar object storage.
-app.use("/uploads", express.static("uploads"));
+// O Helmet envia Cross-Origin-Resource-Policy: same-origin, o que impede o
+// frontend (outra origem) de embutir as imagens; liberamos cross-origin aqui.
+app.use("/uploads", (req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+}, express.static("uploads"));
 
 // Registra as rotas da API.
 app.use("/api/v1", routes);

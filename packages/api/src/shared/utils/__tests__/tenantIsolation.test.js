@@ -14,7 +14,7 @@ describe('tenant isolation', () => {
     describe('baseQuery', () => {
         it('includes tenantId in the filter when provided', () => {
             const query = baseQuery(tenantA, false);
-            expect(query.tenantId).toBe(tenantA);
+            expect(String(query.tenantId)).toBe(tenantA);
             expect(query.deletedAt).toBeNull();
         });
 
@@ -26,7 +26,7 @@ describe('tenant isolation', () => {
 
         it('can include deleted records for admins/masters', () => {
             const query = baseQuery(tenantA, true);
-            expect(query.tenantId).toBe(tenantA);
+            expect(String(query.tenantId)).toBe(tenantA);
             expect(query.deletedAt).toBeUndefined();
         });
     });

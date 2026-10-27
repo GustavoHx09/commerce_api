@@ -4,9 +4,12 @@ import customers from "../customer/customerModel.js";
 import orders from "../order/orderModel.js";
 import cashiers from "../cashier/cashierModel.js";
 import cashierMovements from "../cashier/cashierMovementModel.js";
+import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 
 // Monta o filtro por tenant, ignorando registros soft deleted.
-const tenantFilter = (tenantId, extra = {}) => tenantId ? { tenantId, deletedAt: null, ...extra } : { deletedAt: null, ...extra };
+// Reaproveita baseQuery que converte o tenantId para ObjectId: aggregations do
+// MongoDB não fazem cast de string automaticamente como o Mongoose faz.
+const tenantFilter = (tenantId, extra = {}) => ({ ...baseQuery(tenantId, false), ...extra });
 
 // Conta o total de usuários ativos do tenant.
 export const countUsers = (tenantId) => users.countDocuments(tenantFilter(tenantId));
@@ -21,6 +24,21 @@ export const countCustomers = (tenantId) => customers.countDocuments(tenantFilte
 export const getSalesSummary = async (tenantId, startDate, endDate) => {
     const match = {
         ...tenantFilter(tenantId, { status: { $in: ["paid", "delivered"] } }),
+        createdAt: { $gte: startDate, $lte: endDate },
+    };
+
+    const [count, totalAgg] = await Promise.all([
+        orders.countDocuments(match),
+        orders.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: "$total" } } }]),
+    ]);
+
+    return { count, total: totalAgg[0]?.total || 0 };
+};
+
+// Retorna quantidade e valor total de vendas canceladas/estornadas no período.
+export const getCanceledSalesSummary = async (tenantId, startDate, endDate) => {
+    const match = {
+        ...tenantFilter(tenantId, { status: "canceled" }),
         createdAt: { $gte: startDate, $lte: endDate },
     };
 
@@ -67,9 +85,8 @@ export const getOrdersTotalByCashiers = (cashierIds, tenantId) => {
             {
                 $match: {
                     cashierId: { $in: cashierIds },
-                    tenantId,
+                    ...baseQuery(tenantId, false),
                     status: { $in: ["paid", "delivered"] },
-                    deletedAt: null,
                 },
             },
             { $group: { _id: null, total: { $sum: "$total" } } },

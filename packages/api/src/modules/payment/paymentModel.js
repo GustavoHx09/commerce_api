@@ -45,6 +45,39 @@ const paymentSchema = new mongoose.Schema({
         trim: true,
     },
 
+    // Parcelas do crédito. Obrigatório apenas para credit_card.
+    installments: {
+        type: Number,
+        min: 1,
+        max: 48,
+    },
+
+    // Percentual de juros aplicado neste pagamento (tabela do tenant).
+    interestPercent: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+
+    // Valor dos juros embutido em amount, para conferência no extrato.
+    interestAmount: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+
+    // Identificador da venda no comprovante da maquininha (CV do extrato). Opcional.
+    cardSaleId: {
+        type: String,
+        trim: true,
+    },
+
+    // Código de autorização (AUTO) da transação no comprovante. Opcional.
+    authorizationCode: {
+        type: String,
+        trim: true,
+    },
+
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "users",

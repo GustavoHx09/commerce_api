@@ -5,8 +5,18 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useWorkspaceApi } from '../AdminShell';
 import { useAuth } from '../context/AuthContext';
+import UserPermissionsEditor from '../permissions/components/UserPermissionsEditor';
+import type { PanelUser, PermissionPreset } from '../permissions/types';
 import { hasPermission } from '@/lib/permissions';
-import { display, getValue, type Field, type Row, type Screen } from './config';
+import {
+  display,
+  formatAddress,
+  getValue,
+  maskDocument,
+  type Field,
+  type Row,
+  type Screen,
+} from './config';
 import {
   DataTable,
   errorMessage,
@@ -53,7 +63,7 @@ const detailLabels: Record<string, string> = {
   change: 'Troco',
   status: 'Situação',
   createdAt: 'Criado em',
-  updatedAt: 'Atualizado em',
+  updatedAt: 'Última atualização',
   customerId: 'Cliente',
   cashierId: 'Caixa',
   paymentIds: 'Pagamentos',
@@ -271,6 +281,352 @@ function CashierDetails({ row }: { row: Row }) {
   );
 }
 
+// Detalhes de um registro em grade compacta de cards. Quando a tela permite
+// edição, o botão "Editar" habilita os campos no próprio modal — sem abrir
+// outro — e vira "Salvar"; dados gerenciados pelo sistema (saldo, criador,
+// datas) permanecem somente leitura. Ações extras (ex.: suprimento/retirada
+// de estoque) são injetadas pelo rodapé via `actions`.
+function EditableDetails({
+  row,
+  fields,
+  endpoint,
+  detailKey,
+  canEdit,
+  actions,
+  onSaved,
+}: {
+  row: Row;
+  fields: Field[];
+  endpoint: string;
+  detailKey?: string;
+  canEdit: boolean;
+  actions?: React.ReactNode;
+  onSaved: (updated: Row) => void;
+}) {
+  const { client } = useWorkspaceApi();
+  const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [options, setOptions] = useState<Record<string, Row[]>>({});
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Campos editáveis: remove os exclusivos de criação (ex.: senha inicial)
+  // e o perfil de usuário para quem não é master (mesma regra do RecordForm).
+  const editableFields = fields.filter(
+    (field) =>
+      !field.createOnly &&
+      !(
+        endpoint === '/users' &&
+        field.key === 'role' &&
+        user?.role !== 'master'
+      )
+  );
+
+  // Carrega as opções de campos com fonte externa (ex.: categoria, produto).
+  const sources = [
+    ...new Set(editableFields.flatMap((f) => (f.source ? [f.source] : []))),
+  ].join('|');
+  useEffect(() => {
+    if (!sources) return;
+    let active = true;
+    Promise.all(
+      sources
+        .split('|')
+        .map(async (source) => [source, await loadOptions(client, source)] as const)
+    )
+      .then((entries) => {
+        if (active) setOptions(Object.fromEntries(entries));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [sources, client]);
+
+  const startEditing = () => {
+    setError('');
+    setValues(
+      Object.fromEntries(
+        editableFields.map((field) => {
+          let value = getValue(row, field.key);
+          if (value && typeof value === 'object') value = (value as Row)._id;
+          if (field.key === 'isActive')
+            value = value === false ? 'false' : 'true';
+          if (field.key === 'documentType' && value == null) value = 'cpf';
+          if (field.type === 'date' && value) value = String(value).slice(0, 10);
+          return [field.key, value == null ? '' : String(value)];
+        })
+      )
+    );
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setError('');
+    const payload: Row = {};
+    for (const field of editableFields) {
+      if (field.readOnly) continue;
+      const raw = (values[field.key] || '').trim();
+      if (field.required && !raw) {
+        setError(`Preencha ${field.label}.`);
+        return;
+      }
+      if (
+        raw &&
+        field.type === 'number' &&
+        (!Number.isFinite(Number(raw)) || Number(raw) < (field.min ?? -Infinity))
+      ) {
+        setError(`Valor inválido para ${field.label}.`);
+        return;
+      }
+      // Numérico vazio não é enviado; strings vazias seguem como "" para
+      // permitir limpar campos opcionais.
+      const value: unknown = !raw
+        ? field.type === 'number' || field.options || field.source
+          ? undefined
+          : ''
+        : field.key === 'isActive'
+          ? raw === 'true'
+          : field.type === 'number'
+            ? Number(raw)
+            : raw;
+      if (value === undefined) continue;
+      const parts = field.key.split('.');
+      if (parts.length === 2)
+        payload[parts[0]] = {
+          ...((payload[parts[0]] as Row) || {}),
+          [parts[1]]: value,
+        };
+      else payload[field.key] = value;
+    }
+    setBusy(true);
+    try {
+      const response = await client.put(`${endpoint}/${row._id}`, payload);
+      setEditing(false);
+      onSaved(response.data.data[detailKey || ''] || response.data.data);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Chaves já cobertas pelos campos da tela (inclui grupos como "address.*").
+  const covered = new Set(editableFields.map((f) => f.key.split('.')[0]));
+  // Campos do documento sem formulário viram cards somente leitura no fim.
+  const readOnly = Object.entries(row).filter(
+    ([key, value]) =>
+      value != null &&
+      !hiddenFields.has(key) &&
+      !covered.has(key) &&
+      !Array.isArray(value) &&
+      // "Criado em" é redundante com "Última atualização"; descrição foi
+      // removida do formulário de produtos e não aparece nos detalhes.
+      key !== 'createdAt' &&
+      key !== 'description'
+  );
+
+  const fieldCell = 'px-4 py-2.5 text-sm';
+  const fieldHead =
+    'px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500';
+
+  // Campos ocultos (ex.: documentType) vão no payload mas não viram linha.
+  const visibleFields = editableFields.filter((field) => !field.hidden);
+
+  // Partes do endereço exibidas em uma linha consolidada "Endereço" no modo
+  // leitura; na edição cada uma continua no seu próprio campo.
+  const addressParts = [
+    'address.number',
+    'address.neighborhood',
+    'address.city',
+    'address.state',
+  ];
+  const displayRows = visibleFields
+    .filter((field) => !addressParts.includes(field.key))
+    .map((field) =>
+      field.key === 'address.street'
+        ? {
+            key: 'address',
+            label: 'Endereço',
+            text: formatAddress(row.address) || '—',
+          }
+        : {
+            key: field.key,
+            label: field.label,
+            text: display(
+              getValue(row, field.key),
+              field.key.split('.').pop()
+            ),
+          }
+    );
+
+  // Input de um campo no modo edição; o documento ganha o botão CPF/CNPJ.
+  const renderFieldInput = (field: Field) =>
+    field.key === 'document' ? (
+      <div className="flex items-stretch gap-2">
+        <input
+          className="admin-input flex-1"
+          type="text"
+          value={values[field.key] || ''}
+          onChange={(event) =>
+            setValues({
+              ...values,
+              [field.key]: maskDocument(
+                event.target.value,
+                values.documentType || 'cpf'
+              ),
+            })
+          }
+          placeholder={
+            values.documentType === 'cnpj'
+              ? '00.000.000/0000-00'
+              : '000.000.000-00'
+          }
+        />
+        <button
+          type="button"
+          className="admin-secondary whitespace-nowrap px-3 text-xs"
+          onClick={() =>
+            setValues({
+              ...values,
+              documentType: values.documentType === 'cnpj' ? 'cpf' : 'cnpj',
+              document: '',
+            })
+          }
+        >
+          {values.documentType === 'cnpj' ? 'CNPJ' : 'CPF'}
+        </button>
+      </div>
+    ) : field.options || field.source ? (
+      <select
+        className="admin-input"
+        value={values[field.key] || ''}
+        onChange={(event) =>
+          setValues({ ...values, [field.key]: event.target.value })
+        }
+      >
+        <option value="">Selecione</option>
+        {(
+          field.options ||
+          (options[field.source || ''] || []).map(
+            (option) =>
+              [
+                String(option._id),
+                String(option.name || option._id),
+              ] as [string, string]
+          )
+        ).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <input
+        className="admin-input"
+        type={field.type || 'text'}
+        min={field.min}
+        maxLength={field.maxLength}
+        step={field.type === 'number' ? 'any' : undefined}
+        value={values[field.key] || ''}
+        onChange={(event) =>
+          setValues({ ...values, [field.key]: event.target.value })
+        }
+      />
+    );
+
+  return (
+    <div>
+      <Notice error={error} />
+      {/* Campos do sistema (criador, última atualização etc.) no topo. */}
+      {readOnly.length > 0 && (
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          {readOnly.map(([key, value]) => (
+            <div key={key} className={detailBoxClass}>
+              <dt className={detailLabelClass}>{detailLabels[key] || key}</dt>
+              <dd className={`break-words ${detailValueClass}`}>
+                {/* Objetos populados (ex.: criador) exibem só o nome — sem
+                    card aninhado dentro do card. */}
+                {display(value, key)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {/* Campos do registro em formato de lista (Campo | Valor); no modo
+          edição cada linha vira o input correspondente, no mesmo lugar. */}
+      <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full">
+          <thead className="bg-slate-50">
+            <tr className="divide-x divide-slate-200">
+              <th className={fieldHead}>Campo</th>
+              <th className={fieldHead}>Valor</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {editing
+              ? visibleFields.map((field) => (
+                  <tr key={field.key} className="divide-x divide-slate-100">
+                    <td className={`${fieldCell} font-medium text-slate-600`}>
+                      {field.label}
+                    </td>
+                    <td className={`${fieldCell} font-medium text-slate-900`}>
+                      {field.readOnly
+                        ? display(
+                            getValue(row, field.key),
+                            field.key.split('.').pop()
+                          )
+                        : renderFieldInput(field)}
+                    </td>
+                  </tr>
+                ))
+              : displayRows.map((item) => (
+                  <tr key={item.key} className="divide-x divide-slate-100">
+                    <td className={`${fieldCell} font-medium text-slate-600`}>
+                      {item.label}
+                    </td>
+                    <td className={`${fieldCell} font-medium text-slate-900`}>
+                      {item.text}
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-5 flex flex-wrap justify-end gap-3">
+        {editing ? (
+          <>
+            <button
+              className="admin-secondary"
+              disabled={busy}
+              onClick={() => setEditing(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              className="admin-primary"
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {busy ? 'Salvando...' : 'Salvar'}
+            </button>
+          </>
+        ) : (
+          <>
+            {actions}
+            {canEdit && (
+              <button className="admin-primary" onClick={startEditing}>
+                Editar
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function RecordDetails({ row }: { row: Row }) {
   return (
     <dl className="space-y-3">
@@ -354,6 +710,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
   const [editor, setEditor] = useState<Row | null>(null);
   const [details, setDetails] = useState<Row | null>(null);
   const [orderDetails, setOrderDetails] = useState<Row | null>(null);
+  // Funcionário aberto no modal de permissões individuais.
+  const [permUser, setPermUser] = useState<Row | null>(null);
   const [related, setRelated] = useState<Row[]>([]);
   const [relatedPage, setRelatedPage] = useState(1);
   const [relatedPages, setRelatedPages] = useState(0);
@@ -585,9 +943,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
       : action?.name === 'cancel' && screen.endpoint === '/orders'
         ? [{ key: 'cancelReason', label: 'Motivo do cancelamento' }]
         : [];
-  const canEdit =
-    Boolean(screen.fields) &&
-    !['/cashiers', '/stock/movements'].includes(screen.endpoint);
+  // Caixas não têm edição de cadastro: só ações operacionais.
+  const canEdit = Boolean(screen.fields) && screen.endpoint !== '/cashiers';
 
   return (
     <main className="mx-auto max-w-screen-2xl p-4 sm:p-8">
@@ -603,11 +960,38 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               Gerenciar categorias
             </Link>
           )}
+          {/* Registro manual de estoque (suprimento/retirada/acerto) a partir
+              da tela de produtos — cada tipo exige sua permissão. */}
+          {screen.endpoint === '/products' &&
+            (hasPermission(user?.permissions, 'stock:supply') ||
+              hasPermission(user?.permissions, 'stock:adjust')) && (
+              <button
+                className="admin-secondary"
+                disabled={!tenantId}
+                onClick={() =>
+                  setAction({
+                    row: {},
+                    name: 'stockMovement',
+                    title: 'Nova movimentação de estoque',
+                  })
+                }
+              >
+                Nova movimentação
+              </button>
+            )}
           {screen.endpoint === '/categories' && (
             <Link href="/management/products" className="admin-secondary">
-              Gerenciar produtos
+              Gerenciar estoque
             </Link>
           )}
+          {/* Em Funcionários, "Permissões" leva às predefinições —
+              mesmo padrão do botão "Gerenciar categorias" em Estoque. */}
+          {screen.endpoint === '/users' &&
+            ['admin', 'master'].includes(user?.role || '') && (
+              <Link href="/management/presets" className="admin-secondary">
+                Permissões
+              </Link>
+            )}
           {screen.endpoint === '/audit' && rows.length > 0 && (
             <button className="admin-secondary" onClick={() => window.print()}>
               Imprimir / PDF
@@ -644,9 +1028,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
             >
               {screen.endpoint === '/cashiers'
                 ? 'Abrir caixa'
-                : screen.endpoint === '/stock/movements'
-                  ? 'Nova movimentação'
-                  : 'Novo cadastro'}
+                : 'Novo cadastro'}
             </button>
           )}
         </div>
@@ -735,10 +1117,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                     )}
                   </div>
                 ))}
-                {/* Produtos usam apenas "Buscar" (mesma função do "Filtrar"). */}
-                <button className="admin-primary">
-                  {isProducts ? 'Buscar' : 'Filtrar'}
-                </button>
+                <button className="admin-primary">Buscar</button>
                 <button
                   type="button"
                   className="admin-secondary"
@@ -895,59 +1274,10 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                     >
                       Detalhes
                     </button>
-                    {/* Suprimento/retirada direto na linha do produto —
-                        exibidos só para quem tem stock:supply (admin/master
-                        ou quem recebeu a permissão). */}
-                    {screen.endpoint === '/products' &&
-                      row.isActive !== false &&
-                      hasPermission(user?.permissions, 'stock:supply') && (
-                        <>
-                          <button
-                            className={actionButtonClass}
-                            onClick={() =>
-                              setAction({
-                                row,
-                                name: 'supply',
-                                title: `Suprimento · ${display(row.name)}`,
-                              })
-                            }
-                          >
-                            Suprimento
-                          </button>
-                          <button
-                            className={actionButtonClass}
-                            onClick={() =>
-                              setAction({
-                                row,
-                                name: 'withdraw',
-                                title: `Retirada · ${display(row.name)}`,
-                              })
-                            }
-                          >
-                            Retirada
-                          </button>
-                        </>
-                      )}
-                    {screen.endpoint === '/users' &&
-                      row.role !== 'master' &&
-                      (user?.role === 'admin' || user?.role === 'master') && (
-                        <Link
-                          className={actionButtonClass}
-                          href={`/permissions?user=${String(row._id)}`}
-                        >
-                          Permissões
-                        </Link>
-                      )}
-                    {canEdit &&
-                      row.status !== 'cancelled' &&
-                      row.role !== 'master' && (
-                        <button
-                          className={actionButtonClass}
-                          onClick={() => setEditor(row)}
-                        >
-                          Editar
-                        </button>
-                      )}
+                    {/* Edição acontece dentro do modal de detalhes — a linha
+                        mostra só "Detalhes" e as ações específicas da tela. */}
+
+
                     {screen.actions
                       ?.filter(([name]) =>
                         screen.endpoint === '/orders'
@@ -1036,22 +1366,6 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                     user?.role !== 'master' &&
                     field.key === 'role'
                   )
-              )
-              .map((field) =>
-                // Na tela de movimentações, cada tipo aparece só para quem
-                // tem a permissão correspondente (o backend bloqueia de
-                // qualquer forma via stock:supply / stock:adjust).
-                field.key === 'type' && screen.endpoint === '/stock/movements'
-                  ? {
-                      ...field,
-                      options: field.options?.filter(([value]) =>
-                        hasPermission(
-                          user?.permissions,
-                          `stock:${value === 'adjust' ? 'adjust' : 'supply'}`
-                        )
-                      ),
-                    }
-                  : field
               )}
             initial={editor}
             editing={Boolean(editor._id)}
@@ -1069,6 +1383,62 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
             <OrderDetails row={details} />
           ) : screen.endpoint === '/cashiers' ? (
             <CashierDetails row={details} />
+          ) : screen.fields ? (
+            <EditableDetails
+              row={details}
+              fields={screen.fields}
+              endpoint={screen.endpoint}
+              detailKey={screen.detailKey}
+              canEdit={canEdit}
+              actions={
+                screen.endpoint === '/products' &&
+                details.isActive !== false &&
+                hasPermission(user?.permissions, 'stock:supply') ? (
+                  <>
+                    <button
+                      className="admin-secondary"
+                      onClick={() =>
+                        setAction({
+                          row: details,
+                          name: 'supply',
+                          title: `Suprimento · ${display(details.name)}`,
+                        })
+                      }
+                    >
+                      Suprimento
+                    </button>
+                    <button
+                      className="admin-secondary"
+                      onClick={() =>
+                        setAction({
+                          row: details,
+                          name: 'withdraw',
+                          title: `Retirada · ${display(details.name)}`,
+                        })
+                      }
+                    >
+                      Retirada
+                    </button>
+                  </>
+                ) : screen.endpoint === '/users' &&
+                  details.role !== 'master' &&
+                  ['admin', 'master'].includes(user?.role || '') ? (
+                  // Gerencia as permissões individuais do funcionário:
+                  // preset, extras e revogações.
+                  <button
+                    className="admin-secondary"
+                    onClick={() => setPermUser(details)}
+                  >
+                    Permissões
+                  </button>
+                ) : undefined
+              }
+              onSaved={(updated) => {
+                setDetails(updated);
+                setMessage('Registro salvo com sucesso.');
+                void load();
+              }}
+            />
           ) : (
             <RecordDetails row={details} />
           )}
@@ -1186,6 +1556,17 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           )}
         </Modal>
       )}
+      {permUser && (
+        <UserPermissionsModal
+          user={permUser}
+          onClose={() => setPermUser(null)}
+          onSaved={async () => {
+            setPermUser(null);
+            setMessage('Permissões atualizadas com sucesso.');
+            await load();
+          }}
+        />
+      )}
       {orderDetails && (
         <Modal
           title={`Venda ${display(orderDetails.orderNumber, 'orderNumber')}`}
@@ -1194,7 +1575,16 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           <OrderDetails row={orderDetails} />
         </Modal>
       )}
-      {action && action.name === 'pay' && screen.endpoint === '/bills' ? (
+      {action && action.name === 'stockMovement' ? (
+        <StockMovementModal
+          onClose={() => setAction(null)}
+          onDone={async () => {
+            setAction(null);
+            setMessage('Operação concluída com sucesso.');
+            await load();
+          }}
+        />
+      ) : action && action.name === 'pay' && screen.endpoint === '/bills' ? (
         <PayBillModal
           bill={action.row}
           onClose={() => setAction(null)}
@@ -1475,6 +1865,276 @@ function PayBillModal({
             </button>
           </div>
         </form>
+      )}
+    </Modal>
+  );
+}
+
+// Modal de nova movimentação de estoque: busca o produto por nome/SKU,
+// permite escolher na lista de resultados e registra tipo, quantidade,
+// motivo e referência — cada tipo exibe só se o usuário tem a permissão.
+function StockMovementModal({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const { client } = useWorkspaceApi();
+  const { user } = useAuth();
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<Row[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [product, setProduct] = useState<Row | null>(null);
+  const [values, setValues] = useState({ type: '', quantity: '', reason: '', reference: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Tipos permitidos conforme as permissões efetivas do usuário.
+  const typeOptions = (
+    [
+      ['in', 'Suprimento (entrada)'],
+      ['out', 'Retirada (saída)'],
+      ['adjust', 'Ajuste de inventário (saldo final)'],
+    ] as [string, string][]
+  ).filter(([value]) =>
+    hasPermission(user?.permissions, `stock:${value === 'adjust' ? 'adjust' : 'supply'}`)
+  );
+
+  const findProducts = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSearching(true);
+    setError('');
+    setSearched(true);
+    // Uma nova busca reabre a lista e limpa a seleção anterior.
+    setProduct(null);
+    try {
+      // Busca vazia retorna todos os produtos ativos (o backend não
+      // aplica filtro de texto); limitamos a lista do modal a 50 itens.
+      const response = await client.get('/products', {
+        params: { search: search.trim(), limit: 50 },
+      });
+      setResults(response.data.data.data as Row[]);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    try {
+      if (!product) throw new Error('Selecione um produto na lista.');
+      if (!values.type) throw new Error('Selecione o tipo de movimentação.');
+      const quantity = Number(values.quantity);
+      if (!Number.isFinite(quantity) || quantity < 0)
+        throw new Error('Informe uma quantidade válida.');
+      if (values.type !== 'adjust' && quantity === 0)
+        throw new Error('A quantidade deve ser maior que zero.');
+      if (values.type === 'out' && quantity > Number(product.quantityInStock))
+        throw new Error('Estoque insuficiente para a retirada.');
+      if (!values.reason.trim()) throw new Error('Informe o motivo.');
+      setBusy(true);
+      await client.post('/stock/movements', {
+        productId: product._id,
+        type: values.type,
+        quantity,
+        reason: values.reason.trim(),
+        reference: values.reference.trim(),
+      });
+      await onDone();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Nova movimentação de estoque" onClose={onClose}>
+      <div className="space-y-5">
+        <Notice error={error} />
+        <form className="flex items-end gap-3" onSubmit={findProducts}>
+          <div className="flex-1">
+            <label htmlFor="movement-product" className="admin-label">
+              Produto
+            </label>
+            <input
+              id="movement-product"
+              className="admin-input"
+              placeholder="Nome ou SKU do produto"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <button className="admin-primary" disabled={searching}>
+            {searching ? 'Buscando...' : 'Buscar'}
+          </button>
+        </form>
+
+        {product && (
+          <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            Selecionado: <strong>{display(product.name)}</strong>
+            {' · '}Estoque atual: {String(product.quantityInStock)}
+          </p>
+        )}
+
+        {/* A lista de resultados fecha ao selecionar um produto. */}
+        {searched && !searching && !product && (
+          results.length ? (
+            <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+              {results.map((item) => (
+                <li key={String(item._id)}>
+                  <button
+                    type="button"
+                    onClick={() => setProduct(item)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-slate-50"
+                  >
+                    <span className="font-medium text-slate-800">
+                      {display(item.name)}
+                      <span className="ml-2 text-xs text-slate-400">
+                        {display(item.sku, 'sku')}
+                      </span>
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      Estoque: {String(item.quantityInStock)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">Nenhum produto encontrado.</p>
+          )
+        )}
+
+        <form className="space-y-4" onSubmit={submit}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="admin-label">
+              Movimentação *
+              <select
+                className="admin-input mt-1"
+                value={values.type}
+                onChange={(event) => setValues({ ...values, type: event.target.value })}
+                required
+              >
+                <option value="">Selecione</option>
+                {typeOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-label">
+              Quantidade *
+              <input
+                className="admin-input mt-1"
+                type="number"
+                min={values.type === 'adjust' ? 0 : 0.01}
+                step="any"
+                value={values.quantity}
+                onChange={(event) => setValues({ ...values, quantity: event.target.value })}
+                required
+              />
+            </label>
+            <label className="admin-label">
+              Motivo *
+              <input
+                className="admin-input mt-1"
+                value={values.reason}
+                onChange={(event) => setValues({ ...values, reason: event.target.value })}
+                required
+              />
+            </label>
+            <label className="admin-label">
+              Referência
+              <input
+                className="admin-input mt-1"
+                value={values.reference}
+                onChange={(event) => setValues({ ...values, reference: event.target.value })}
+              />
+            </label>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="admin-secondary" onClick={onClose} disabled={busy}>
+              Voltar
+            </button>
+            <button className="admin-primary" disabled={busy}>
+              {busy ? 'Registrando...' : 'Confirmar movimentação'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Modal>
+  );
+}
+
+// Modal de permissões individuais do funcionário: carrega os presets do
+// tenant e o catálogo, e reaproveita o editor completo (preset + extras +
+// revogações) dentro de um modal.
+function UserPermissionsModal({
+  user: target,
+  onClose,
+  onSaved,
+}: {
+  user: Row;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { client, tenantId } = useWorkspaceApi();
+  const [presets, setPresets] = useState<PermissionPreset[]>([]);
+  const [catalog, setCatalog] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const [presetRows, catalogRes] = await Promise.all([
+          loadOptions(client, '/permission-presets'),
+          client.get('/permission-presets/available-permissions'),
+        ]);
+        if (!active) return;
+        // Presets globais (sem tenant) valem para todas as empresas.
+        setPresets(
+          (presetRows as unknown as PermissionPreset[]).filter(
+            (preset) => !preset.tenantId || preset.tenantId === tenantId
+          )
+        );
+        setCatalog(catalogRes.data.data.permissions);
+      } catch (cause) {
+        if (active) setError(errorMessage(cause));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [client, tenantId]);
+
+  return (
+    <Modal title={`Permissões · ${display(target.name)}`} onClose={onClose}>
+      {loading ? (
+        <p role="status" className="text-sm text-slate-500">
+          Carregando permissões...
+        </p>
+      ) : error ? (
+        <Notice error={error} />
+      ) : (
+        <UserPermissionsEditor
+          key={String(target._id)}
+          user={target as unknown as PanelUser}
+          presets={presets}
+          catalog={catalog}
+          onSaved={onSaved}
+        />
       )}
     </Modal>
   );

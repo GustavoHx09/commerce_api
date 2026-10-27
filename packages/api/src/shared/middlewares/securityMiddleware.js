@@ -21,9 +21,12 @@ export const createOriginMiddleware = (allowedOrigins) => {
 };
 
 // Limita o número total de requisições por IP em uma janela de tempo.
+// Funciona como backstop contra abuso; o limite real por negócio é por
+// usuário (1000) e por tenant (10000) na mesma janela, no authMiddleware.
+// O valor pode ser ajustado via RATE_LIMIT_MAX no .env.
 export const rateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 100, // 100 requisições por IP
+    max: Number(process.env.RATE_LIMIT_MAX) || 3000,
     standardHeaders: true,
     legacyHeaders: false,
     // Desabilita a validação do proxy para ambientes como o Render, onde o trust proxy é gerenciado no app.

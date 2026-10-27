@@ -13,7 +13,7 @@ import {
 } from "./userRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isEmpty, isValid, numberFormatReplace, isValidPhone, isValidCPF, cepIsValid, emailIsValid } from "../../shared/utils/fieldsValidations.js";
-import { validateRequired, validateEnum, throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { validateRequired, validateEnum, throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { emailExists, cpfExists } from "./userValidations.js";
 import { auditAction } from "../audit/auditHelpers.js";
@@ -332,14 +332,22 @@ export const getUsersService = async (query, tenantId, includeDeleted = false) =
         filter.role = query.role;
     }
 
-    if (query.isActive !== undefined) {
+    // Visão da listagem ("view") igual à de produtos/clientes: active
+    // (padrão), inactive ou all. O parâmetro legado isActive continua aceito.
+    if (query.view === "all") {
+        // Todos: sem filtro de situação.
+    } else if (query.view === "inactive") {
+        filter.isActive = false;
+    } else if (query.isActive !== undefined) {
         filter.isActive = query.isActive === "true";
+    } else {
+        filter.isActive = true;
     }
 
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
             { email: { $regex: term.toLowerCase(), $options: "i" } },
         ];
     }

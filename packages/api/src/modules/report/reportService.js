@@ -124,17 +124,23 @@ const getCashFlowGroupBy = (value) => {
 };
 
 // Calcula os totais de um período a partir dos valores parciais.
+// inflow/outflow refletem o dinheiro físico do caixa: vendas em dinheiro,
+// contas liquidadas via caixa, reforços e sangrias/estornos.
 const buildCashFlowTotals = (values) => {
     const sales = values.sales || 0;
+    const cashSales = values.cashSales || 0;
     const billsReceive = values.billsReceive || 0;
     const billsPay = values.billsPay || 0;
+    const billsReceiveCashier = values.billsReceiveCashier || 0;
+    const billsPayCashier = values.billsPayCashier || 0;
     const suprimentos = values.suprimentos || 0;
     const sangrias = values.sangrias || 0;
-    const inflow = sales + billsReceive + suprimentos;
-    const outflow = billsPay + sangrias;
+    const estornos = values.estornos || 0;
+    const inflow = cashSales + billsReceiveCashier + suprimentos;
+    const outflow = sangrias + estornos + billsPayCashier;
     const balance = inflow - outflow;
 
-    return { sales, billsReceive, billsPay, suprimentos, sangrias, inflow, outflow, balance };
+    return { sales, cashSales, billsReceive, billsPay, suprimentos, sangrias, estornos, inflow, outflow, balance };
 };
 
 // Mescla os arrays de vendas, contas e movimentações por período.
@@ -153,7 +159,7 @@ const mergeCashFlowByPeriod = (sales, bills, movements) => {
 
     for (const item of movements) {
         const current = map.get(item.period) || {};
-        map.set(item.period, { ...current, suprimentos: item.suprimentos, sangrias: item.sangrias });
+        map.set(item.period, { ...current, ...item });
     }
 
     const data = [];
@@ -164,18 +170,10 @@ const mergeCashFlowByPeriod = (sales, bills, movements) => {
         data.push({ period, ...totals });
     }
 
+    const zero = { sales: 0, cashSales: 0, billsReceive: 0, billsPay: 0, suprimentos: 0, sangrias: 0, estornos: 0, inflow: 0, outflow: 0, balance: 0 };
     const summary = data.reduce(
-        (acc, item) => ({
-            sales: acc.sales + item.sales,
-            billsReceive: acc.billsReceive + item.billsReceive,
-            billsPay: acc.billsPay + item.billsPay,
-            suprimentos: acc.suprimentos + item.suprimentos,
-            sangrias: acc.sangrias + item.sangrias,
-            inflow: acc.inflow + item.inflow,
-            outflow: acc.outflow + item.outflow,
-            balance: acc.balance + item.balance,
-        }),
-        { sales: 0, billsReceive: 0, billsPay: 0, suprimentos: 0, sangrias: 0, inflow: 0, outflow: 0, balance: 0 }
+        (acc, item) => Object.fromEntries(Object.keys(zero).map((key) => [key, acc[key] + item[key]])),
+        zero
     );
 
     return { data, summary };
@@ -197,8 +195,7 @@ export const getCashFlowReportService = async (query, tenantId) => {
             sales: sales.total,
             billsReceive: bills.receive,
             billsPay: bills.pay,
-            suprimentos: movements.suprimentos,
-            sangrias: movements.sangrias,
+            ...movements,
         });
 
         return { start, end, groupBy, summary };

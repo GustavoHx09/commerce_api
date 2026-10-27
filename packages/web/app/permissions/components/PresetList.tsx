@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import api from '@/lib/api';
+import { useWorkspaceApi } from '../../AdminShell';
 import PresetForm from './PresetForm';
 import type { PermissionPreset, PanelUser } from '../types';
 
@@ -25,6 +25,7 @@ export default function PresetList({
   userRole,
   onChanged,
 }: PresetListProps) {
+  const { client: api } = useWorkspaceApi();
   const [editing, setEditing] = useState<PermissionPreset | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
@@ -34,9 +35,10 @@ export default function PresetList({
 
   const handleDelete = async (preset: PermissionPreset) => {
     const linked = linkedUsersCount(preset._id);
-    const warning = linked > 0
-      ? ` Este preset está vinculado a ${linked} usuário(s), que passarão a usar as permissões do cargo.`
-      : '';
+    const warning =
+      linked > 0
+        ? ` Este preset está vinculado a ${linked} usuário(s), que passarão a usar as permissões do cargo.`
+        : '';
 
     if (!window.confirm(`Remover o preset "${preset.name}"?${warning}`)) return;
 
@@ -50,7 +52,9 @@ export default function PresetList({
 
   const handleToggleActive = async (preset: PermissionPreset) => {
     try {
-      await api.put(`/permission-presets/${preset._id}`, { isActive: !preset.isActive });
+      await api.put(`/permission-presets/${preset._id}`, {
+        isActive: !preset.isActive,
+      });
       onChanged();
     } catch {
       setError('Não foi possível atualizar o preset.');
@@ -60,7 +64,9 @@ export default function PresetList({
   return (
     <section className="rounded-xl bg-white p-6 shadow">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Presets de permissões</h2>
+        <h2 className="text-xl font-bold text-gray-900">
+          Presets de permissões
+        </h2>
         {canWrite && (
           <button
             onClick={() => setCreating(true)}
@@ -82,7 +88,10 @@ export default function PresetList({
             const isGlobal = preset.tenantId === null;
 
             return (
-              <li key={preset._id} className="flex items-center justify-between py-3">
+              <li
+                key={preset._id}
+                className="flex items-center justify-between py-3"
+              >
                 <div>
                   <p className="font-medium text-gray-900">
                     {preset.name}
@@ -98,7 +107,8 @@ export default function PresetList({
                     )}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {preset.description || 'Sem descrição'} · {preset.permissions.length} permissão(ões)
+                    {preset.description || 'Sem descrição'} ·{' '}
+                    {preset.permissions.length} permissão(ões)
                     {linked > 0 && ` · ${linked} usuário(s) vinculado(s)`}
                   </p>
                 </div>

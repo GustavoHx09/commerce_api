@@ -3,10 +3,10 @@ import {
     countProducts,
     countCustomers,
     getSalesSummary,
+    getCanceledSalesSummary,
     getLowStockProducts,
     getOpenCashiers,
     getCashierMovementsSummary,
-    getOrdersTotalByCashiers,
 } from "./dashboardRepo.js";
 
 // Calcula o início do dia, da semana (domingo) e do mês em UTC.
@@ -22,7 +22,10 @@ const getPeriodStartDates = () => {
     return { todayStart, weekStart, monthStart, now };
 };
 
-// Calcula o saldo total em caixas abertos: inicial + vendas + suprimentos - sangrias.
+// Tipos de movimentação que entram dinheiro no caixa físico.
+const INFLOW_TYPES = ["suprimento", "venda", "recebimento_conta"];
+
+// Calcula o saldo total em caixas abertos pela soma assinada das movimentações.
 const calculateCashierBalance = async (tenantId) => {
     const openCashiers = await getOpenCashiers(tenantId);
     const cashierIds = openCashiers.map((cashier) => cashier._id);
@@ -31,18 +34,15 @@ const calculateCashierBalance = async (tenantId) => {
         return { openCashiersCount: 0, totalBalance: 0 };
     }
 
-    const [movements, ordersTotal] = await Promise.all([
-        getCashierMovementsSummary(cashierIds),
-        getOrdersTotalByCashiers(cashierIds, tenantId),
-    ]);
-
-    const suprimentos = movements.find((m) => m._id === "suprimento")?.total || 0;
-    const sangrias = movements.find((m) => m._id === "sangria")?.total || 0;
+    const movements = await getCashierMovementsSummary(cashierIds);
     const initialAmount = openCashiers.reduce((sum, cashier) => sum + Number(cashier.initialAmount || 0), 0);
 
-    const totalBalance = initialAmount + ordersTotal + suprimentos - sangrias;
+    const movementsTotal = movements.reduce(
+        (sum, m) => INFLOW_TYPES.includes(m._id) ? sum + m.total : sum - m.total,
+        0
+    );
 
-    return { openCashiersCount: openCashiers.length, totalBalance };
+    return { openCashiersCount: openCashiers.length, totalBalance: initialAmount + movementsTotal };
 };
 
 // Retorna os dados agregados do dashboard para o tenant informado.
@@ -56,6 +56,7 @@ export const getDashboardData = async (tenantId) => {
         salesToday,
         salesWeek,
         salesMonth,
+        canceledMonth,
         lowStockProducts,
         { openCashiersCount, totalBalance },
     ] = await Promise.all([
@@ -65,6 +66,7 @@ export const getDashboardData = async (tenantId) => {
         getSalesSummary(tenantId, todayStart, now),
         getSalesSummary(tenantId, weekStart, now),
         getSalesSummary(tenantId, monthStart, now),
+        getCanceledSalesSummary(tenantId, monthStart, now),
         getLowStockProducts(tenantId),
         calculateCashierBalance(tenantId),
     ]);
@@ -76,6 +78,7 @@ export const getDashboardData = async (tenantId) => {
         salesToday,
         salesWeek,
         salesMonth,
+        canceledMonth,
         lowStockProducts,
         openCashiersCount,
         totalInCashier: totalBalance,

@@ -62,9 +62,9 @@ morgan.token("timestamp", () => {
     return new Date().toISOString();
 });
 
-// Token customizado que recupera o ID do usuário autenticado, se houver.
-morgan.token("userId", (req) => {
-    return req.user?.id || "anonymous";
+// Token customizado que recupera o nome do usuário autenticado, se houver.
+morgan.token("userName", (req) => {
+    return req.user?.name || "anonymous";
 });
 
 // Token customizado que recupera a role do usuário autenticado, se houver.
@@ -72,9 +72,9 @@ morgan.token("role", (req) => {
     return req.user?.role || "-";
 });
 
-// Token customizado que recupera o tenantId do usuário autenticado, se houver.
-morgan.token("tenantId", (req) => {
-    return req.user?.tenantId || "-";
+// Token customizado que recupera o nome da empresa da requisição, se houver.
+morgan.token("tenantName", (req) => {
+    return req.tenantName || req.user?.tenantName || "-";
 });
 
 // Substitui o token padrão de URL para ofuscar parâmetros sensíveis.
@@ -84,7 +84,7 @@ morgan.token("url", (req) => {
 
 // Formato do log de requisição, com informações de auditoria.
 const logFormat =
-    "[:timestamp] :method :url :status - userId=:userId role=:role tenantId=:tenantId :response-time ms";
+    "[:timestamp] :method :url :status - usuario=:userName role=:role empresa=:tenantName :response-time ms";
 
 // Logger que salva as requisições no arquivo app.log.
 export const requestLogger = morgan(logFormat, {

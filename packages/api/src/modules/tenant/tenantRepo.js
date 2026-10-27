@@ -41,3 +41,12 @@ export const restoreTenantRepo = (id) => {
 
 // Remove permanentemente um tenant do banco de dados.
 export const deleteTenantRepo = (id) => tenants.findByIdAndDelete(id);
+
+// Incrementa o contador sequencial de vendas do tenant de forma atômica e
+// retorna o tenant atualizado (o número da venda sai de orderCounter).
+export const incrementOrderCounterRepo = (id, { session } = {}) =>
+    tenants.findOneAndUpdate(
+        { _id: id, deletedAt: null },
+        { $inc: { orderCounter: 1 } },
+        { new: true, session }
+    );

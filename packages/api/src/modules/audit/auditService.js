@@ -70,6 +70,21 @@ export const createAuditLog = async ({ entityType, entityId, tenantId, action, a
     }, { session });
 };
 
+// Tenta extrair um nome amigável do documento auditado a partir do snapshot
+// (ou das alterações em exclusões). Evita exibir o ObjectId ao usuário.
+const resolveEntityName = (log) => {
+    const doc = log.snapshot || log.changes;
+    if (!doc || typeof doc !== "object") return null;
+
+    for (const key of ["name", "displayName", "description", "sku", "email", "reason"]) {
+        if (typeof doc[key] === "string" && doc[key]) return doc[key];
+    }
+
+    if (doc.orderNumber) return `Venda #${doc.orderNumber}`;
+
+    return null;
+};
+
 // Lista os registros de auditoria respeitando o isolamento do tenant.
 export const getAuditLogsService = async (query, tenantId, isMaster) => {
     const { page, limit, skip } = getPagination(query);
@@ -88,5 +103,11 @@ export const getAuditLogsService = async (query, tenantId, isMaster) => {
         countAuditLogsRepo(filters),
     ]);
 
-    return paginatedResponse(logs, page, limit, total);
+    // Anexa um nome legível do registro para exibição no lugar do ID.
+    const data = logs.map((log) => {
+        const obj = log.toObject ? log.toObject() : log;
+        return { ...obj, entityName: resolveEntityName(obj) || String(obj.entityId) };
+    });
+
+    return paginatedResponse(data, page, limit, total);
 };

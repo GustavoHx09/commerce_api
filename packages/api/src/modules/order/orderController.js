@@ -21,6 +21,6 @@ export const getOrderById = async (req, res) => {
 };
 
 export const cancelOrder = async (req, res) => {
-    const order = await cancelOrderService(req.params.id, req.body, req.tenantId, req.user.id);
+    const order = await cancelOrderService(req.params.id, req.body, req.tenantId, req.user.id, req.user.role);
     return successResponse(res, { order }, "Venda cancelada com sucesso");
 };

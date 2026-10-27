@@ -11,6 +11,17 @@ export const getCategoriesRepo = (filter, skip, limit, sort) =>
 // Conta categorias que satisfazem o filtro.
 export const countCategoriesRepo = (filter) => categories.countDocuments(filter);
 
+// Retorna os IDs das categorias do tenant cujo nome corresponde ao termo.
+// Usado pela busca de produtos para incluir itens da categoria encontrada.
+// O termo já chega como padrão regex (acento-insensível) do service.
+export const getCategoryIdsByNameRepo = async (tenantId, term) => {
+    const rows = await categories
+        .find({ ...baseQuery(tenantId, false), name: { $regex: term, $options: "i" } })
+        .select("_id")
+        .lean();
+    return rows.map((row) => row._id);
+};
+
 // Busca uma categoria pelo ID dentro do tenant e considerando soft delete.
 export const getCategoryByIdRepo = (id, tenantId, includeDeleted = false) =>
     categories.findOne({ _id: id, ...baseQuery(tenantId, includeDeleted) });

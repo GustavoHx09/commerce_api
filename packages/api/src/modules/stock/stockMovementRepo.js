@@ -9,14 +9,23 @@ export const createStockMovementRepo = async (data, { session } = {}) => {
 
 // Retorna movimentações paginadas com base no filtro.
 export const getStockMovementsRepo = (filter, skip, limit, sort) =>
-    stockMovements.find(filter).skip(skip).limit(limit).sort(sort).populate("productId", "name sku");
+    stockMovements
+        .find(filter)
+        .skip(skip)
+        .limit(limit)
+        .sort(sort)
+        .populate("productId", "name sku")
+        .populate("createdBy", "name");
 
 // Conta movimentações que satisfazem o filtro.
 export const countStockMovementsRepo = (filter) => stockMovements.countDocuments(filter);
 
 // Busca uma movimentação pelo ID dentro do tenant.
 export const getStockMovementByIdRepo = (id, tenantId) =>
-    stockMovements.findOne({ _id: id, ...baseQuery(tenantId, false) }).populate("productId", "name sku");
+    stockMovements
+        .findOne({ _id: id, ...baseQuery(tenantId, false) })
+        .populate("productId", "name sku")
+        .populate("createdBy", "name");
 
 // Conta movimentações de um produto específico (usado em hard delete).
 export const countStockMovementsByProductRepo = (productId) => stockMovements.countDocuments({ productId });

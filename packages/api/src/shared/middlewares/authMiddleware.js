@@ -41,6 +41,7 @@ export const authMiddleware = async (req, res, next) => {
         }
 
         // Usuários vinculados a um tenant só acessam se o tenant estiver ativo.
+        let tenantName = null;
         if (user.tenantId) {
             const tenant = await tenants.findOne({
                 _id: user.tenantId,
@@ -51,6 +52,8 @@ export const authMiddleware = async (req, res, next) => {
             if (!tenant) {
                 return res.status(403).json({ message: "Empresa inativa ou removida" });
             }
+
+            tenantName = tenant.displayName || tenant.name;
         }
 
         req.user = {
@@ -59,6 +62,7 @@ export const authMiddleware = async (req, res, next) => {
             email: user.email,
             role: user.role,
             tenantId: user.tenantId?.toString?.() || null,
+            tenantName,
             permissionPresetId: user.permissionPresetId?.toString?.() || null,
             permissions: user.permissions || [],
             revokedPermissions: user.revokedPermissions || [],
@@ -101,13 +105,31 @@ export const isAdmin = (req, res, next) => {
     next();
 };
 
+// Cache simples de nomes de tenant para logs: o master informa o tenant pela
+// query e resolve o nome uma única vez por processo.
+const tenantNameCache = new Map();
+
+const resolveTenantName = async (tenantId) => {
+    if (tenantNameCache.has(tenantId)) {
+        return tenantNameCache.get(tenantId);
+    }
+
+    const tenant = await tenants.findById(tenantId).select("name displayName").lean();
+    const name = tenant?.displayName || tenant?.name || tenantId;
+    tenantNameCache.set(tenantId, name);
+    return name;
+};
+
 // Anexa o tenantId do usuário autenticado na requisição para filtrar dados.
 // Usuários master não possuem tenantId e podem acessar todos os tenants.
-export const tenantMiddleware = (req, res, next) => {
+export const tenantMiddleware = async (req, res, next) => {
     if (req.user.role === "master") {
         req.tenantId = req.query.tenantId || null;
+        // Resolve o nome da empresa para exibição nos logs de requisição.
+        req.tenantName = req.tenantId ? await resolveTenantName(req.tenantId) : null;
     } else {
         req.tenantId = req.user.tenantId;
+        req.tenantName = req.user.tenantName || null;
     }
 
     next();

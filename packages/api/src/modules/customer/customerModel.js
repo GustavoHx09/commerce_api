@@ -58,6 +58,13 @@ const customerSchema = new mongoose.Schema({
         default: true,
     },
 
+    // Usuário que cadastrou o cliente — populado para exibir o nome nos detalhes.
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "users",
+        default: null,
+    },
+
     deletedAt: {
         type: Date,
         default: null,

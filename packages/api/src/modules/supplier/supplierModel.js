@@ -53,6 +53,13 @@ const supplierSchema = new mongoose.Schema({
         trim: true,
     },
 
+    // Observações livres sobre o fornecedor (o que fornece, condições etc.).
+    observations: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+    },
+
     address: {
         type: addressSchema,
         default: {},
@@ -61,6 +68,13 @@ const supplierSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true,
+    },
+
+    // Usuário que cadastrou o fornecedor — populado para exibir o nome nos detalhes.
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "users",
+        default: null,
     },
 
     deletedAt: {

@@ -1,9 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import api from '@/lib/api';
+import { useWorkspaceApi } from '../../AdminShell';
 import PermissionChecklist from './PermissionChecklist';
-import { DEFAULT_ROLE_PERMISSIONS, computeEffectivePermissions } from '@/lib/permissions';
+import {
+  DEFAULT_ROLE_PERMISSIONS,
+  computeEffectivePermissions,
+} from '@/lib/permissions';
 import type { PanelUser, PermissionPreset } from '../types';
 
 interface UserPermissionsEditorProps {
@@ -21,32 +24,43 @@ export default function UserPermissionsEditor({
   catalog,
   onSaved,
 }: UserPermissionsEditorProps) {
+  const { client: api } = useWorkspaceApi();
   // O estado inicial vem do usuário recebido; o componente é montado com
   // key={user._id} na página, então trocar de usuário recria o estado.
-  const [presetId, setPresetId] = useState<string>(user.permissionPresetId || '');
+  const [presetId, setPresetId] = useState<string>(
+    user.permissionPresetId || ''
+  );
   // Sem preset, o campo permissions funciona como base legada no backend;
   // no painel ele é tratado como ajuste manual e só faz sentido com preset.
   const [extras, setExtras] = useState<Set<string>>(
-    new Set(user.permissionPresetId ? user.permissions : []),
+    new Set(user.permissionPresetId ? user.permissions : [])
   );
-  const [revoked, setRevoked] = useState<Set<string>>(new Set(user.revokedPermissions || []));
+  const [revoked, setRevoked] = useState<Set<string>>(
+    new Set(user.revokedPermissions || [])
+  );
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const selectedPreset = useMemo(
     () => presets.find((p) => p._id === presetId) || null,
-    [presets, presetId],
+    [presets, presetId]
   );
 
   // Base = permissões do preset vinculado ou o padrão do cargo.
   const base = useMemo(
-    () => selectedPreset?.permissions ?? DEFAULT_ROLE_PERMISSIONS[user.role] ?? [],
-    [selectedPreset, user.role],
+    () =>
+      selectedPreset?.permissions ?? DEFAULT_ROLE_PERMISSIONS[user.role] ?? [],
+    [selectedPreset, user.role]
   );
 
   const effective = useMemo(
-    () => computeEffectivePermissions(base, Array.from(extras), Array.from(revoked)),
-    [base, extras, revoked],
+    () =>
+      computeEffectivePermissions(
+        base,
+        Array.from(extras),
+        Array.from(revoked)
+      ),
+    [base, extras, revoked]
   );
 
   // Origem exibida no selo ao lado de cada permissão.
@@ -89,8 +103,8 @@ export default function UserPermissionsEditor({
       });
       onSaved();
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message;
       setError(message || 'Não foi possível salvar as permissões.');
     } finally {
       setIsSaving(false);
@@ -107,7 +121,10 @@ export default function UserPermissionsEditor({
       </p>
 
       <div className="mb-6">
-        <label htmlFor="preset" className="mb-1 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="preset"
+          className="mb-1 block text-sm font-medium text-gray-700"
+        >
           Preset vinculado
         </label>
         <select

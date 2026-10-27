@@ -9,7 +9,10 @@ export const getCustomersRepo = (filter, skip, limit, sort) =>
     customers.find(filter).skip(skip).limit(limit).sort(sort);
 export const countCustomersRepo = (filter) => customers.countDocuments(filter);
 export const getCustomerByIdRepo = (id, tenantId, includeDeleted = false, { session } = {}) =>
-    customers.findOne({ _id: id, ...baseQuery(tenantId, includeDeleted) }).session(session);
+    customers
+        .findOne({ _id: id, ...baseQuery(tenantId, includeDeleted) })
+        .session(session)
+        .populate("createdBy", "name");
 export const updateCustomerRepo = (id, data, tenantId, { session } = {}) =>
     customers.findOneAndUpdate({ _id: id, ...baseQuery(tenantId, false) }, data, { new: true, session });
 export const softDeleteCustomerRepo = (id, tenantId, { session } = {}) =>

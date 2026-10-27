@@ -4,6 +4,8 @@ import {
     countCashiersRepo,
     getCashierByIdRepo,
     getOpenCashierByUserRepo,
+    getOpenCashierByTenantRepo,
+    getLastClosedCashierRepo,
     updateCashierRepo,
     softDeleteCashierRepo,
     restoreCashierRepo,
@@ -11,42 +13,79 @@ import {
     createCashierMovementRepo,
     getCashierMovementsRepo,
     countCashierMovementsRepo,
+    getCashierBalancesRepo,
 } from "./cashierRepo.js";
-import { getPaidOrdersTotalByCashier, countOrdersByCashierRepo } from "../order/orderRepo.js";
+import { countOrdersByCashierRepo } from "../order/orderRepo.js";
+import { getCashierPaymentTotalsRepo } from "../payment/paymentRepo.js";
+import { getTenantByIdRepo } from "../tenant/tenantRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
-// Calcula o saldo atual do caixa considerando valor inicial, movimentações e vendas pagas.
-const calculateCashierBalance = async (cashier, session) => {
-    const movementsFilter = { cashierId: cashier._id, tenantId: cashier.tenantId };
-    const [movements, paidOrdersTotal] = await Promise.all([
-        getCashierMovementsRepo(movementsFilter, 0, 0, {}),
-        getPaidOrdersTotalByCashier(cashier._id, cashier.tenantId, { session }),
-    ]);
+// Tipos de movimentação que aumentam o dinheiro físico em caixa.
+const INFLOW_TYPES = ["suprimento", "venda", "recebimento_conta"];
 
-    const suprimentos = movements
-        .filter((m) => m.type === "suprimento")
-        .reduce((sum, m) => sum + m.amount, 0);
-    const sangrias = movements
-        .filter((m) => m.type === "sangria")
-        .reduce((sum, m) => sum + m.amount, 0);
+// Calcula o saldo atual do caixa somente pelas movimentações registradas,
+// que são criadas em tempo real a cada venda, estorno, sangria, reforço e conta.
+export const calculateCashierBalance = async (cashier, session) => {
+    const movements = await getCashierMovementsRepo(
+        { cashierId: cashier._id, tenantId: cashier.tenantId },
+        0, 0, {}, { session }
+    );
 
-    return cashier.initialAmount + suprimentos - sangrias + paidOrdersTotal;
+    return movements.reduce(
+        (balance, m) => INFLOW_TYPES.includes(m.type) ? balance + m.amount : balance - m.amount,
+        cashier.initialAmount
+    );
+};
+
+// Registra uma movimentação de caixa gerada pelo sistema (venda, estorno,
+// pagamento de conta). Usada pelos services de pedido e conta dentro da
+// mesma transação para manter o extrato do caixa em tempo real.
+export const createSystemCashierMovement = async (data, actorId, { session } = {}) => {
+    return createCashierMovementRepo({
+        cashierId: data.cashierId,
+        tenantId: data.tenantId,
+        type: data.type,
+        amount: data.amount,
+        reason: data.reason ? String(data.reason).trim() : null,
+        orderId: data.orderId || null,
+        billId: data.billId || null,
+        createdBy: actorId,
+    }, { session });
 };
 
 export const createCashierService = async (data, tenantId, actorId) => {
-    validateRequired(data.initialAmount, "valor inicial");
+    // O tenant define o modo de operação: "shared" impõe um único caixa aberto
+    // para toda a empresa; "per_operator" (padrão) impõe um caixa por usuário.
+    const tenant = await getTenantByIdRepo(tenantId);
+    const sharedMode = tenant?.cashierMode === "shared";
 
-    const initialAmount = Number(data.initialAmount);
-    if (isNaN(initialAmount) || initialAmount < 0) {
-        throwValidationError("Valor inicial deve ser um número positivo ou zero");
+    const existing = sharedMode
+        ? await getOpenCashierByTenantRepo(tenantId)
+        : await getOpenCashierByUserRepo(tenantId, actorId);
+    if (existing) {
+        throwValidationError(
+            sharedMode ? "Já existe um caixa aberto para esta empresa" : "Usuário já possui um caixa aberto",
+            409
+        );
     }
 
-    const existing = await getOpenCashierByUserRepo(tenantId, actorId);
-    if (existing) {
-        throwValidationError("Usuário já possui um caixa aberto", 409);
+    // A partir do segundo caixa, o valor inicial é obrigatoriamente o saldo de
+    // fechamento do caixa anterior. O valor enviado pelo cliente é ignorado,
+    // garantindo a regra também contra alterações via ferramentas de dev.
+    const lastClosed = await getLastClosedCashierRepo(tenantId);
+
+    let initialAmount;
+    if (lastClosed) {
+        initialAmount = Number(lastClosed.finalAmount || 0);
+    } else {
+        validateRequired(data.initialAmount, "valor inicial");
+        initialAmount = Number(data.initialAmount);
+        if (isNaN(initialAmount) || initialAmount < 0) {
+            throwValidationError("Valor inicial deve ser um número positivo ou zero");
+        }
     }
 
     const cashier = await createCashierRepo({
@@ -76,11 +115,39 @@ export const getCashiersService = async (query, tenantId, includeDeleted = false
         countCashiersRepo(filter),
     ]);
 
-    return paginatedResponse(data, page, limit, total);
+    // Anexa o saldo atual (inicial + movimentações) a cada caixa listado.
+    const balances = await getCashierBalancesRepo(data.map((row) => row._id));
+    const balanceById = new Map(balances.map((entry) => [entry._id.toString(), entry.balance]));
+
+    const rows = data.map((row) => ({
+        ...row.toObject(),
+        balance: (row.initialAmount || 0) + (balanceById.get(row._id.toString()) || 0),
+    }));
+
+    return { ...paginatedResponse(rows, page, limit, total) };
 };
 
-export const getCashierByIdService = (id, tenantId, includeDeleted = false) => {
-    return getCashierByIdRepo(id, tenantId, includeDeleted);
+// Retorna o caixa com o saldo atual calculado pelas movimentações em tempo real
+// e os totais recebidos por forma de pagamento (dinheiro, pix e cartões).
+export const getCashierByIdService = async (id, tenantId, includeDeleted = false) => {
+    const cashier = await getCashierByIdRepo(id, tenantId, includeDeleted);
+
+    if (!cashier) return cashier;
+
+    const [balance, totals] = await Promise.all([
+        calculateCashierBalance(cashier),
+        getCashierPaymentTotalsRepo(cashier._id, tenantId),
+    ]);
+
+    const byMethod = new Map(totals.map((entry) => [entry._id, entry.total]));
+    const paymentTotals = {
+        cash: byMethod.get("cash") || 0,
+        pix: byMethod.get("pix") || 0,
+        // Cartões agrupam débito e crédito em um único total.
+        cards: (byMethod.get("credit_card") || 0) + (byMethod.get("debit_card") || 0),
+    };
+
+    return { ...cashier.toObject(), balance, paymentTotals };
 };
 
 export const closeCashierService = async (id, tenantId, actorId) => {
@@ -92,6 +159,13 @@ export const closeCashierService = async (id, tenantId, actorId) => {
 
     if (previous.status !== "open") {
         throwValidationError("Caixa já está fechado", 409);
+    }
+
+    // Regra de negócio: somente o usuário que abriu o caixa pode fechá-lo,
+    // em qualquer modo de operação (openedBy pode vir populado com o nome).
+    const openerId = String(previous.openedBy?._id || previous.openedBy);
+    if (openerId !== actorId) {
+        throwValidationError("Somente o usuário que abriu o caixa pode fechá-lo", 403);
     }
 
     const finalAmount = await calculateCashierBalance(previous);

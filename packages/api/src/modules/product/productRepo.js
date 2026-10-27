@@ -20,7 +20,8 @@ export const getProductByIdRepo = (id, tenantId, includeDeleted = false, { sessi
     return products
         .findOne({ _id: id, ...baseQuery(tenantId, includeDeleted) })
         .session(session)
-        .populate("categoryId", "name");
+        .populate("categoryId", "name")
+        .populate("createdBy", "name");
 };
 
 // Busca um produto pelo SKU dentro do tenant, ignorando soft deleted.

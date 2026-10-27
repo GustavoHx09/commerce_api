@@ -10,6 +10,10 @@ export type Field = {
   maxLength?: number;
   createOnly?: boolean;
   disabled?: boolean;
+  // Campo somente leitura nos detalhes (não entra no formulário de cadastro).
+  readOnly?: boolean;
+  // Valor controlado por outro campo: existe no payload mas não vira input.
+  hidden?: boolean;
   hint?: string;
   // Rótulo do item vazio nos filtros (quando omitido, exibe "Todos").
   emptyLabel?: string;
@@ -46,16 +50,19 @@ const active: Field = {
 };
 const contactFields: Field[] = [
   { key: 'name', label: 'Nome', required: true },
+  // O tipo não vira uma linha própria: um botão no input de documento
+  // alterna CPF/CNPJ, mas o valor continua sendo enviado ao backend.
   {
     key: 'documentType',
     label: 'Tipo de documento',
     required: true,
+    hidden: true,
     options: [
       ['cpf', 'CPF'],
       ['cnpj', 'CNPJ'],
     ],
   },
-  { key: 'document', label: 'CPF/CNPJ', required: true },
+  { key: 'document', label: 'Documento', required: true },
   { key: 'email', label: 'Email', type: 'email' },
   { key: 'phone', label: 'Telefone' },
   ...addressFields,
@@ -68,6 +75,22 @@ const contactColumns: [string, string][] = [
   ['phone', 'Telefone'],
   ['isActive', 'Situação'],
 ];
+
+// Clientes: mesma lista sem a coluna de situação (o status fica no filtro).
+const customerColumns: [string, string][] = contactColumns.filter(
+  ([key]) => key !== 'isActive'
+);
+
+// Filtro de busca compartilhado: vazio = Ativos (padrão do backend).
+const activeViewFilter: Field = {
+  key: 'view',
+  label: 'Filtros de busca',
+  emptyLabel: 'Ativos',
+  options: [
+    ['inactive', 'Inativos'],
+    ['all', 'Todos'],
+  ],
+};
 const billFields: Field[] = [
   { key: 'description', label: 'Descrição', required: true },
   {
@@ -102,7 +125,7 @@ const billFilters: Field[] = [
 
 export const screens: Record<string, Screen> = {
   products: {
-    title: 'Produtos',
+    title: 'Estoque',
     description:
       'Organize o catálogo, os preços e as informações dos seus produtos.',
     endpoint: '/products',
@@ -110,9 +133,9 @@ export const screens: Record<string, Screen> = {
     detailKey: 'product',
     columns: [
       ['name', 'Produto'],
+      ['costPrice', 'Custo'],
       ['price', 'Preço'],
       ['quantityInStock', 'Estoque'],
-      ['isActive', 'Situação'],
     ],
     filters: [
       {
@@ -129,14 +152,13 @@ export const screens: Record<string, Screen> = {
     ],
     fields: [
       { key: 'name', label: 'Nome', required: true },
-      { key: 'sku', label: 'SKU', required: true },
-      { key: 'description', label: 'Descrição' },
       {
         key: 'categoryId',
         label: 'Categoria',
         source: '/categories',
         required: true,
       },
+      { key: 'sku', label: 'SKU', required: true },
       {
         key: 'unit',
         label: 'Unidade',
@@ -145,6 +167,13 @@ export const screens: Record<string, Screen> = {
           (unit) => [unit, unit]
         ),
       },
+      active,
+      {
+        key: 'costPrice',
+        label: 'Custo (R$)',
+        type: 'number',
+        min: 0,
+      },
       {
         key: 'price',
         label: 'Preço de venda (R$)',
@@ -152,14 +181,8 @@ export const screens: Record<string, Screen> = {
         min: 0,
         required: true,
       },
-      {
-        key: 'costPrice',
-        label: 'Preço de custo (R$)',
-        type: 'number',
-        min: 0,
-      },
+      { key: 'quantityInStock', label: 'Estoque atual', readOnly: true },
       { key: 'minStock', label: 'Estoque mínimo', type: 'number', min: 0 },
-      active,
     ],
   },
   categories: {
@@ -171,8 +194,8 @@ export const screens: Record<string, Screen> = {
     columns: [
       ['name', 'Nome'],
       ['description', 'Descrição'],
-      ['isActive', 'Situação'],
     ],
+    filters: [activeViewFilter],
     fields: [
       { key: 'name', label: 'Nome', required: true },
       { key: 'description', label: 'Descrição' },
@@ -186,8 +209,9 @@ export const screens: Record<string, Screen> = {
     endpoint: '/customers',
     search: true,
     detailKey: 'customer',
-    columns: contactColumns,
+    columns: customerColumns,
     fields: contactFields,
+    filters: [activeViewFilter],
   },
   suppliers: {
     title: 'Fornecedores',
@@ -195,7 +219,8 @@ export const screens: Record<string, Screen> = {
     endpoint: '/suppliers',
     search: true,
     detailKey: 'supplier',
-    columns: contactColumns,
+    columns: customerColumns,
+    filters: [activeViewFilter],
     fields: [
       ...contactFields,
       { key: 'contactName', label: 'Nome do contato' },
@@ -214,8 +239,8 @@ export const screens: Record<string, Screen> = {
       ['email', 'Email'],
       ['role', 'Perfil'],
       ['phone', 'Telefone'],
-      ['isActive', 'Situação'],
     ],
+    filters: [activeViewFilter],
     fields: [
       { key: 'name', label: 'Nome', required: true },
       { key: 'email', label: 'Email', type: 'email', required: true },
@@ -239,61 +264,6 @@ export const screens: Record<string, Screen> = {
       },
       ...addressFields,
       active,
-    ],
-  },
-  movements: {
-    title: 'Movimentações e inventário',
-    description:
-      'Entradas e saídas alteram o saldo; o ajuste de inventário define a quantidade final contada.',
-    endpoint: '/stock/movements',
-    search: true,
-    detailKey: 'movement',
-    columns: [
-      ['productId', 'Produto'],
-      ['type', 'Tipo'],
-      ['quantity', 'Quantidade'],
-      ['previousQuantity', 'Anterior'],
-      ['newQuantity', 'Novo saldo'],
-      ['reason', 'Motivo'],
-      ['createdAt', 'Data'],
-    ],
-    fields: [
-      {
-        key: 'productId',
-        label: 'Produto',
-        source: '/products',
-        required: true,
-      },
-      {
-        key: 'type',
-        label: 'Movimentação',
-        required: true,
-        options: [
-          ['in', 'Entrada'],
-          ['out', 'Saída'],
-          ['adjust', 'Ajuste de inventário (saldo final)'],
-        ],
-      },
-      {
-        key: 'quantity',
-        label: 'Quantidade',
-        type: 'number',
-        min: 0,
-        required: true,
-      },
-      { key: 'reason', label: 'Motivo' },
-      { key: 'reference', label: 'Referência' },
-    ],
-    filters: [
-      {
-        key: 'type',
-        label: 'Tipo',
-        options: [
-          ['in', 'Entrada'],
-          ['out', 'Saída'],
-          ['adjust', 'Ajuste'],
-        ],
-      },
     ],
   },
   orders: {
@@ -452,6 +422,63 @@ export const labels: Record<string, string> = {
   audit: 'Auditoria',
 };
 
+const digits = (value: unknown) => String(value ?? '').replace(/\D/g, '');
+
+// Formata CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00) conforme os dígitos.
+export function formatDocument(value: unknown): string {
+  const d = digits(value);
+  if (d.length === 11)
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  if (d.length === 14)
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  return String(value ?? '');
+}
+
+// Formata CEP como 00000-000.
+export function formatCep(value: unknown): string {
+  const d = digits(value);
+  return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : String(value ?? '');
+}
+
+// Formata telefone como (00) 0000-0000 ou (00) 00000-0000.
+export function formatPhone(value: unknown): string {
+  const d = digits(value);
+  if (d.length === 11)
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10)
+    return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return String(value ?? '');
+}
+
+// Aplica a máscara do tipo de documento enquanto o usuário digita.
+export function maskDocument(value: unknown, type = 'cpf'): string {
+  const d = digits(value).slice(0, type === 'cnpj' ? 14 : 11);
+  if (type === 'cpf') {
+    return d
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+// Monta o endereço em uma linha: "Rua, número, bairro, cidade/UF".
+export function formatAddress(address: unknown): string {
+  const a = (address || {}) as Row;
+  return [
+    a.street,
+    a.number,
+    a.neighborhood,
+    a.city && a.state ? `${a.city}/${a.state}` : a.city || a.state,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function getValue(row: Row, key: string): unknown {
   // O sufixo "@date" marca a coluna para exibir só a data (sem hora) —
   // o valor buscado continua sendo o campo antes do sufixo.
@@ -477,6 +504,10 @@ export function display(value: unknown, key = ''): string {
     );
   }
   if (key === 'orderNumber') return `#${String(value)}`;
+  // Documentos, CEP e telefone sempre exibidos formatados.
+  if (['document', 'cpf'].includes(key)) return formatDocument(value);
+  if (key === 'zipCode') return formatCep(value);
+  if (key === 'phone') return formatPhone(value);
   // Parcelas: 1x vira "À vista", demais exibem "Nx".
   if (key === 'installments')
     return Number(value) > 1 ? `${value}x` : 'À vista';

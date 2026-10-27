@@ -26,7 +26,7 @@ packages/web/
 │   ├── login/            # Página de login
 │   ├── forgot-password/  # Solicitação de recuperação de senha
 │   ├── reset-password/   # Redefinição de senha via token do email
-│   ├── permissions/      # Painel de autorizações (presets e permissões por usuário)
+│   ├── permissions/      # Componentes de autorização (presets e editor por usuário)
 │   └── dashboard/        # Página protegida do painel
 ├── lib/           # Clientes e utilitários (axios)
 ├── types/         # Declarações de tipos globais
@@ -113,8 +113,8 @@ As páginas `/management/[screen]` incluem:
 | --- | --- |
 | `/management/categories` | Cadastro e edição de categorias |
 | `/management/customers`, `/management/suppliers`, `/management/users` | Clientes, fornecedores e funcionários (usuários do sistema) |
-| `/management/products` | Catálogo com suprimento/retirada de estoque na linha (exige `stock:supply`) e filtro de busca (ativos, inativos, estoque baixo ou todos) |
-| `/management/movements` | Entradas, saídas e contagem por ajuste de saldo final |
+| `/management/products` | Catálogo com suprimento/retirada nos detalhes (exige `stock:supply`), botão "Nova movimentação" (inclui acerto via `stock:adjust`) e filtro de busca (ativos, inativos, estoque baixo ou todos) |
+| Relatório de movimentações de estoque (em `/management/reports`) | Entradas, saídas e acertos com saldo anterior/novo, motivo e responsável |
 | `/management/pos`, `/management/orders` | PDV, detalhes, pagamentos e cancelamento de vendas |
 | `/management/cashiers` | Abertura, histórico, sangria, reforço e fechamento |
 | `/management/payables`, `/management/receivables` | Contas a pagar/receber e liquidação/cancelamento |
@@ -123,7 +123,7 @@ As páginas `/management/[screen]` incluem:
 | `/management/audit`, `/management/exports` | Auditoria e download paginado de CSV/JSON |
 | `/management/account` | Dados da sessão e acesso à recuperação de senha |
 
-O painel existente `/permissions` é reutilizado para presets e autorizações individuais. Para a modelagem inicial, o menu exibe todos os módulos; a API continua aplicando suas permissões e retorna erros de autorização normalmente. O refinamento de visibilidade por permissão e o painel exclusivo MASTER ficam para a próxima etapa.
+O controle de acesso vive em Funcionários: o botão "Permissões" abre `/management/presets` (lista e criação de predefinições) e os detalhes de cada usuário trazem o editor individual (preset + extras + revogações). A API continua aplicando suas permissões e retorna erros de autorização normalmente. O painel exclusivo MASTER fica para a próxima etapa.
 
 Usuários MASTER selecionam uma empresa no cabeçalho para operar nas novas telas. Não se trata de uma troca de identidade: as regras de autoria e permissões continuam sendo as do usuário autenticado. O dashboard também respeita a empresa selecionada.
 

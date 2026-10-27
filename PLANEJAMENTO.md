@@ -160,7 +160,7 @@ Objetivo: entregar a base operacional necessária para registrar produtos e rela
 
 - [x] Categorias.
 - [x] Produtos com unidade, preço, SKU e estoque mínimo.
-- [x] Movimentações e inventário de estoque.
+- [x] Movimentações e inventário de estoque (listagem virou relatório; registro manual fica em Produtos).
 - [x] Alertas de estoque baixo.
 - [x] Clientes.
 - [x] Fornecedores.

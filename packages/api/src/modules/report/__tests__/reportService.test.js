@@ -143,7 +143,7 @@ describe('reportService', () => {
     it('returns cash flow report grouped by day with merged data', async () => {
         mockGetCashFlowSales.mockResolvedValue([{ period: '2026-09-05', total: 100 }]);
         mockGetCashFlowBills.mockResolvedValue([{ period: '2026-09-05', receive: 50, pay: 20 }]);
-        mockGetCashFlowMovements.mockResolvedValue([{ period: '2026-09-05', suprimentos: 10, sangrias: 5 }]);
+        mockGetCashFlowMovements.mockResolvedValue([{ period: '2026-09-05', suprimentos: 10, sangrias: 5, cashSales: 70, estornos: 0, billsPayCashier: 0, billsReceiveCashier: 0 }]);
 
         const result = await getCashFlowReportService({ groupBy: 'day' }, 'tenantA');
 
@@ -153,22 +153,22 @@ describe('reportService', () => {
         expect(result.data[0].billsPay).toBe(20);
         expect(result.data[0].suprimentos).toBe(10);
         expect(result.data[0].sangrias).toBe(5);
-        expect(result.data[0].inflow).toBe(160);
-        expect(result.data[0].outflow).toBe(25);
-        expect(result.data[0].balance).toBe(135);
-        expect(result.summary.balance).toBe(135);
+        expect(result.data[0].inflow).toBe(80);
+        expect(result.data[0].outflow).toBe(5);
+        expect(result.data[0].balance).toBe(75);
+        expect(result.summary.balance).toBe(75);
     });
 
     it('returns cash flow summary when groupBy is none', async () => {
         mockGetCashFlowSales.mockResolvedValue({ total: 200 });
         mockGetCashFlowBills.mockResolvedValue({ receive: 80, pay: 40 });
-        mockGetCashFlowMovements.mockResolvedValue({ suprimentos: 20, sangrias: 10 });
+        mockGetCashFlowMovements.mockResolvedValue({ suprimentos: 20, sangrias: 10, cashSales: 150, estornos: 0, billsPayCashier: 30, billsReceiveCashier: 0 });
 
         const result = await getCashFlowReportService({ groupBy: 'none' }, 'tenantA');
 
-        expect(result.summary.inflow).toBe(300);
-        expect(result.summary.outflow).toBe(50);
-        expect(result.summary.balance).toBe(250);
+        expect(result.summary.inflow).toBe(170);
+        expect(result.summary.outflow).toBe(40);
+        expect(result.summary.balance).toBe(130);
     });
 
     it('defaults cash flow groupBy to day', async () => {

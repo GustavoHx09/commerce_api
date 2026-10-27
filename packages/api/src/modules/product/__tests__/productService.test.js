@@ -61,6 +61,7 @@ describe('productService', () => {
                 unit: 'un',
                 categoryId: 'cat1',
                 tenantId: '64abc',
+                createdBy: '64def',
             };
 
             mockCreateProductRepo.mockResolvedValue({ _id: '123', ...expectedData });

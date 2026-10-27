@@ -35,7 +35,7 @@ export const updateBill = async (req, res) => {
 };
 
 export const payBill = async (req, res) => {
-    const bill = await payBillService(req.params.id, req.tenantId, req.user.id);
+    const bill = await payBillService(req.params.id, req.body, req.tenantId, req.user.id);
     return successResponse(res, { bill }, "Conta paga/recebida com sucesso");
 };
 

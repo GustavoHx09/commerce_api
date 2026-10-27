@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import api from '@/lib/api';
+import { useWorkspaceApi } from '../../AdminShell';
 import PermissionChecklist from './PermissionChecklist';
 import type { PermissionPreset } from '../types';
 
@@ -20,11 +20,12 @@ export default function PresetForm({
   affectedUsers,
   onClose,
 }: PresetFormProps) {
+  const { client: api, tenantId } = useWorkspaceApi();
   const [name, setName] = useState(preset?.name || '');
   const [description, setDescription] = useState(preset?.description || '');
   const [isActive, setIsActive] = useState(preset?.isActive ?? true);
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(preset?.permissions || []),
+    new Set(preset?.permissions || [])
   );
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -66,13 +67,13 @@ export default function PresetForm({
       if (isEditing) {
         await api.put(`/permission-presets/${preset._id}`, payload);
       } else {
-        await api.post('/permission-presets', payload);
+        await api.post('/permission-presets', { ...payload, tenantId });
       }
 
       onClose(true);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message;
       setError(message || 'Não foi possível salvar o preset.');
       setIsSaving(false);
     }
@@ -94,14 +95,17 @@ export default function PresetForm({
 
         {isEditing && affectedUsers > 0 && hasChangesToPermissions && (
           <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-            Atenção: este preset está vinculado a {affectedUsers} usuário(s).
-            As alterações serão propagadas automaticamente para todos eles.
+            Atenção: este preset está vinculado a {affectedUsers} usuário(s). As
+            alterações serão propagadas automaticamente para todos eles.
           </p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="preset-name" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="preset-name"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
               Nome
             </label>
             <input
@@ -115,7 +119,10 @@ export default function PresetForm({
           </div>
 
           <div>
-            <label htmlFor="preset-description" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="preset-description"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
               Descrição
             </label>
             <input

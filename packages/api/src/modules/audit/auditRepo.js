@@ -20,9 +20,10 @@ const buildFilter = ({ entityType, entityId, tenantId, action }) => {
 };
 
 // Lista registros de auditoria com base nos filtros.
+// O responsável é populado com o nome para exibição direta no frontend.
 export const getAuditLogsRepo = (filters, skip, limit) => {
     const filter = buildFilter(filters);
-    return audit.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    return audit.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("actorId", "name");
 };
 
 // Conta o total de registros de auditoria que satisfazem os filtros.

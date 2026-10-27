@@ -23,7 +23,10 @@ const dateGroupFormat = (groupBy) => {
     return null;
 };
 
-// Retorna resumo de vendas: agrupado ou total consolidado.
+// Status incluídos no relatório de vendas por período (finalizadas e canceladas).
+const REPORT_ORDER_STATUSES = ["paid", "delivered", "canceled"];
+
+// Retorna resumo de vendas: agrupado por período e situação, ou total consolidado.
 export const getSalesSummary = async (tenantId, startDate, endDate, groupBy) => {
     const match = orderBaseMatch(tenantId, startDate, endDate);
 
@@ -39,21 +42,28 @@ export const getSalesSummary = async (tenantId, startDate, endDate, groupBy) => 
         return { count, total: totalAgg[0]?.total || 0 };
     }
 
+    // No detalhamento por período, vendas canceladas também aparecem.
+    const reportMatch = { ...match, status: { $in: REPORT_ORDER_STATUSES } };
+
     const format = dateGroupFormat(groupBy);
     return orders.aggregate([
-        { $match: match },
+        { $match: reportMatch },
         {
             $group: {
-                _id: { $dateToString: { format, date: "$createdAt", timezone: "UTC" } },
+                _id: {
+                    period: { $dateToString: { format, date: "$createdAt", timezone: "UTC" } },
+                    status: "$status",
+                },
                 count: { $sum: 1 },
                 total: { $sum: "$total" },
             },
         },
-        { $sort: { _id: 1 } },
+        { $sort: { "_id.period": 1, "_id.status": 1 } },
         {
             $project: {
                 _id: 0,
-                period: "$_id",
+                period: "$_id.period",
+                status: "$_id.status",
                 count: 1,
                 total: 1,
             },
@@ -193,21 +203,32 @@ export const getCashFlowBills = (tenantId, startDate, endDate, groupBy) => {
     ]);
 };
 
-// Fluxo de caixa: suprimentos e sangrias do período.
+// Fluxo de caixa: todas as movimentações do caixa físico do período, por tipo.
+// "cashSales" = dinheiro das vendas; "estornos" = saída por venda cancelada;
+// "billsPayCashier"/"billsReceiveCashier" = contas liquidadas via caixa.
 export const getCashFlowMovements = (tenantId, startDate, endDate, groupBy) => {
-    const match = { tenantId, createdAt: { $gte: startDate, $lte: endDate } };
+    // Usa o cast de baseQuery: aggregation não converte string em ObjectId.
+    const match = { ...baseQuery(tenantId, true), createdAt: { $gte: startDate, $lte: endDate } };
+    delete match.deletedAt;
 
+    const typeSum = (type) => ({ $sum: { $cond: [{ $eq: ["$type", type] }, "$amount", 0] } });
     const groupTotals = {
-        suprimentos: { $sum: { $cond: [{ $eq: ["$type", "suprimento"] }, "$amount", 0] } },
-        sangrias: { $sum: { $cond: [{ $eq: ["$type", "sangria"] }, "$amount", 0] } },
+        suprimentos: typeSum("suprimento"),
+        sangrias: typeSum("sangria"),
+        cashSales: typeSum("venda"),
+        estornos: typeSum("estorno"),
+        billsPayCashier: typeSum("pagamento_conta"),
+        billsReceiveCashier: typeSum("recebimento_conta"),
     };
+
+    const zeros = { suprimentos: 0, sangrias: 0, cashSales: 0, estornos: 0, billsPayCashier: 0, billsReceiveCashier: 0 };
 
     if (groupBy === "none") {
         return cashierMovements.aggregate([
             { $match: match },
             { $group: { _id: null, ...groupTotals } },
-            { $project: { _id: 0, suprimentos: 1, sangrias: 1 } },
-        ]).then((result) => result[0] || { suprimentos: 0, sangrias: 0 });
+            { $project: { _id: 0, ...Object.fromEntries(Object.keys(zeros).map((key) => [key, 1])) } },
+        ]).then((result) => result[0] || zeros);
     }
 
     const format = dateGroupFormat(groupBy);
@@ -220,6 +241,6 @@ export const getCashFlowMovements = (tenantId, startDate, endDate, groupBy) => {
             },
         },
         { $sort: { _id: 1 } },
-        { $project: { _id: 0, period: "$_id", suprimentos: 1, sangrias: 1 } },
+        { $project: { _id: 0, period: "$_id", ...Object.fromEntries(Object.keys(zeros).map((key) => [key, 1])) } },
     ]);
 };

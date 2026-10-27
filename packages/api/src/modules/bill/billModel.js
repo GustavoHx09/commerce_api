@@ -58,6 +58,30 @@ const billSchema = new mongoose.Schema({
         trim: true,
     },
 
+    // Rastreio da liquidação: quanto saiu do caixa e quanto foi pago por fora.
+    cashierId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "cashiers",
+    },
+
+    cashierAmount: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+
+    externalAmount: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+
+    // Identificador do meio externo usado (pix, cartão etc.) apenas para auditoria.
+    externalMethod: {
+        type: String,
+        enum: ["cash", "pix", "credit_card", "debit_card", "other"],
+    },
+
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "users",

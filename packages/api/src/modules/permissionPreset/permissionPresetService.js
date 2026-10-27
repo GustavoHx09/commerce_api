@@ -8,7 +8,7 @@ import {
     restorePermissionPresetRepo,
 } from "./permissionPresetRepo.js";
 import { SYSTEM_PERMISSIONS } from "../../shared/utils/permissionsCatalog.js";
-import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { validateRequired, throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
@@ -89,8 +89,8 @@ export const getPermissionPresetsService = async (query, actor) => {
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
-            { description: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
+            { description: { $regex: accentInsensitiveRegex(term), $options: "i" } },
         ];
     }
 

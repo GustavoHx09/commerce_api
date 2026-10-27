@@ -6,6 +6,7 @@ import { getPagination, getSort, paginatedResponse } from "../../shared/utils/pa
 const VALID_METHODS = ["cash", "pix", "credit_card", "debit_card", "other"];
 
 // Cria um pagamento vinculado a um pedido. Deve ser chamado dentro de uma transação externa.
+// Para credit_card, installments é obrigatório; juros e identificadores da maquininha são opcionais.
 export const createPaymentService = async (data, tenantId, actorId, { session } = {}) => {
     if (!VALID_METHODS.includes(data.method)) {
         throwValidationError("Forma de pagamento inválida");
@@ -16,6 +17,20 @@ export const createPaymentService = async (data, tenantId, actorId, { session } 
         throwValidationError("Valor do pagamento deve ser um número positivo ou zero");
     }
 
+    let installments = null;
+    if (data.method === "credit_card") {
+        installments = Number(data.installments);
+        if (!Number.isInteger(installments) || installments < 1 || installments > 48) {
+            throwValidationError("Parcelas do cartão de crédito devem ser inteiras entre 1 e 48");
+        }
+    }
+
+    const interestPercent = Number(data.interestPercent || 0);
+    const interestAmount = Number(data.interestAmount || 0);
+    if (interestPercent < 0 || interestAmount < 0 || isNaN(interestPercent) || isNaN(interestAmount)) {
+        throwValidationError("Juros do pagamento inválidos");
+    }
+
     const payment = await createPaymentRepo({
         tenantId,
         orderId: data.orderId,
@@ -23,6 +38,11 @@ export const createPaymentService = async (data, tenantId, actorId, { session } 
         amount,
         method: data.method,
         reference: data.reference ? String(data.reference).trim() : null,
+        installments,
+        interestPercent,
+        interestAmount,
+        cardSaleId: data.cardSaleId ? String(data.cardSaleId).trim() : null,
+        authorizationCode: data.authorizationCode ? String(data.authorizationCode).trim() : null,
         createdBy: actorId,
     }, { session });
 

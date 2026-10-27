@@ -26,6 +26,34 @@ export const validateEnum = (value, allowedValues, fieldName) => {
     }
 };
 
+// Mapa de equivalência de acentos usado nas buscas: cada letra-base agrupa
+// suas variantes acentuadas para a busca casar "joao" e "joão" igualmente.
+const accentGroups = {
+    a: "aáàâãä",
+    e: "eéèêë",
+    i: "iíìîï",
+    o: "oóòôõö",
+    u: "uúùûü",
+    c: "cç",
+    n: "nñ",
+};
+
+// Escapa caracteres especiais de regex para evitar injeção de padrão.
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Converte o termo de busca em um padrão de regex insensível a acentos.
+// Cada letra vira uma classe com suas variantes acentuadas (bidirecional:
+// "joão" também encontra "joao"). Usar com $options: "i" para maiúsculas.
+export const accentInsensitiveRegex = (term) =>
+    String(term)
+        .split("")
+        .map((char) => {
+            const group = accentGroups[char.toLowerCase()];
+            if (group) return `[${group}${group.toUpperCase()}]`;
+            return escapeRegex(char);
+        })
+        .join("");
+
 // Converte campos numéricos para Number e remove campos vazios de string.
 export const sanitizeNumberFields = (data, fields) => {
     fields.forEach((field) => {

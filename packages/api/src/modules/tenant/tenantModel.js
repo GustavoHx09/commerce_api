@@ -89,6 +89,36 @@ const tenantsSchema = new mongoose.Schema({
         fiscalMode: { type: String, enum: ["none", "nfce", "nfe"], default: "none" },
     },
 
+    // Modo de operação do caixa: "per_operator" mantém um caixa aberto por usuário
+    // (vários PDVs com gavetas separadas) e "shared" permite um único caixa
+    // compartilhado por todos os operadores da empresa.
+    cashierMode: {
+        type: String,
+        enum: ["per_operator", "shared"],
+        default: "per_operator",
+    },
+
+    // Contador sequencial de vendas do tenant (incrementado atomicamente a cada pedido).
+    orderCounter: {
+        type: Number,
+        default: 0,
+    },
+
+    // Taxas de recebimento configuradas pelo admin do tenant (maquininha, pix e juros por parcela).
+    // Os juros do crédito são repassados ao cliente e somados ao total cobrado.
+    paymentFees: {
+        pixPercent: { type: Number, default: 0, min: 0 },
+        debitPercent: { type: Number, default: 0, min: 0 },
+        creditInstallments: {
+            type: [{
+                _id: false,
+                installments: { type: Number, required: true, min: 1, max: 48 },
+                interestPercent: { type: Number, required: true, min: 0 },
+            }],
+            default: [],
+        },
+    },
+
     // Plano contratado. Limita recursos como quantidade de usuários.
     plan: {
         type: String,

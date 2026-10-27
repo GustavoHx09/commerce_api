@@ -10,7 +10,7 @@ import {
 } from "./supplierRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isValidDocument, formatDocument, isValidPhone, emailIsValid, cepIsValid } from "../../shared/utils/fieldsValidations.js";
-import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { validateRequired, throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
@@ -62,8 +62,19 @@ const validateCreate = (data) => {
         phone: data.phone ? String(data.phone).trim() : null,
         email: data.email ? String(data.email).toLowerCase().trim() : null,
         contactName: data.contactName ? String(data.contactName).trim() : null,
+        observations: validateObservations(data.observations),
         address: normalizeAddress(data.address),
     };
+};
+
+// Limita observações a 500 caracteres para manter o campo enxuto.
+const validateObservations = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    const text = String(value).trim();
+    if (text.length > 500) {
+        throwValidationError("Observações devem ter no máximo 500 caracteres", 422);
+    }
+    return text;
 };
 
 const validateUpdate = (data, supplier) => {
@@ -90,6 +101,10 @@ const validateUpdate = (data, supplier) => {
 
     if (data.contactName !== undefined) {
         update.contactName = data.contactName ? String(data.contactName).trim() : null;
+    }
+
+    if (data.observations !== undefined) {
+        update.observations = validateObservations(data.observations);
     }
 
     if (data.address !== undefined) {
@@ -133,7 +148,7 @@ export const createSupplierService = async (data, tenantId, actorId) => {
         throwValidationError("Documento já cadastrado para este fornecedor", 409);
     }
 
-    const supplier = await createSupplierRepo({ ...validated, tenantId });
+    const supplier = await createSupplierRepo({ ...validated, tenantId, createdBy: actorId });
 
     await auditAction("supplier", "create", null, supplier, actorId);
 
@@ -146,14 +161,22 @@ export const getSuppliersService = async (query, tenantId, includeDeleted = fals
 
     const filter = { ...baseQuery(tenantId, includeDeleted) };
 
-    if (query.isActive !== undefined) {
+    // Visão da listagem ("view") igual à de produtos/clientes: active
+    // (padrão), inactive ou all. O parâmetro legado isActive continua aceito.
+    if (query.view === "all") {
+        // Todos: sem filtro de situação.
+    } else if (query.view === "inactive") {
+        filter.isActive = false;
+    } else if (query.isActive !== undefined) {
         filter.isActive = query.isActive === "true";
+    } else {
+        filter.isActive = true;
     }
 
     if (query.search) {
         const term = query.search.trim();
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
             { document: { $regex: term, $options: "i" } },
             { email: { $regex: term, $options: "i" } },
         ];
@@ -179,6 +202,9 @@ export const updateSupplierService = async (id, data, tenantId, actorId) => {
     }
 
     const update = validateUpdate(data, previous);
+
+    // O criador do registro não pode ser alterado em edições.
+    delete update.createdBy;
 
     if (update.document) {
         const existing = await getSupplierByDocument(update.document, tenantId);

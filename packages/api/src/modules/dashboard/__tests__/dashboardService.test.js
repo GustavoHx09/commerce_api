@@ -8,7 +8,7 @@ const mockGetSalesSummary = vi.fn();
 const mockGetLowStockProducts = vi.fn();
 const mockGetOpenCashiers = vi.fn();
 const mockGetCashierMovementsSummary = vi.fn();
-const mockGetOrdersTotalByCashiers = vi.fn();
+const mockGetCanceledSalesSummary = vi.fn();
 
 vi.mock('../dashboardRepo.js', () => ({
     countUsers: (...args) => mockCountUsers(...args),
@@ -18,7 +18,7 @@ vi.mock('../dashboardRepo.js', () => ({
     getLowStockProducts: (...args) => mockGetLowStockProducts(...args),
     getOpenCashiers: (...args) => mockGetOpenCashiers(...args),
     getCashierMovementsSummary: (...args) => mockGetCashierMovementsSummary(...args),
-    getOrdersTotalByCashiers: (...args) => mockGetOrdersTotalByCashiers(...args),
+    getCanceledSalesSummary: (...args) => mockGetCanceledSalesSummary(...args),
 }));
 
 describe('dashboardService', () => {
@@ -43,7 +43,7 @@ describe('dashboardService', () => {
             { _id: 'suprimento', total: 50 },
             { _id: 'sangria', total: 20 },
         ]);
-        mockGetOrdersTotalByCashiers.mockResolvedValue(80);
+        mockGetCanceledSalesSummary.mockResolvedValue({ count: 1, total: 60 });
 
         const result = await getDashboardData('tenantA');
 
@@ -56,7 +56,8 @@ describe('dashboardService', () => {
         expect(result.salesMonth.total).toBe(150);
         expect(result.lowStockProducts).toHaveLength(1);
         expect(result.openCashiersCount).toBe(1);
-        expect(result.totalInCashier).toBe(210); // 100 + 80 + 50 - 20
+        expect(result.totalInCashier).toBe(130); // 100 + 50 - 20
+        expect(result.canceledMonth.total).toBe(60);
         expect(mockGetSalesSummary).toHaveBeenCalledTimes(3);
     });
 
