@@ -44,7 +44,6 @@ describe('productService', () => {
                 name: 'Notebook',
                 price: '5000',
                 costPrice: '3500',
-                quantityInStock: '10',
                 minStock: '2',
                 sku: 'NB-001',
                 unit: 'UN',
@@ -57,7 +56,6 @@ describe('productService', () => {
                 name: 'Notebook',
                 price: 5000,
                 costPrice: 3500,
-                quantityInStock: 10,
                 minStock: 2,
                 sku: 'NB-001',
                 unit: 'un',
@@ -78,7 +76,6 @@ describe('productService', () => {
             await expect(createProductService({
                 price: '5000',
                 costPrice: '3500',
-                quantityInStock: '10',
                 sku: 'NB-001',
                 unit: 'un',
                 categoryId: 'cat1',
@@ -90,11 +87,22 @@ describe('productService', () => {
                 name: 'Notebook',
                 price: '-10',
                 costPrice: '3500',
-                quantityInStock: '10',
                 sku: 'NB-001',
                 unit: 'un',
                 categoryId: 'cat1',
             }, '64abc', '64def')).rejects.toThrow('deve ser um número positivo');
+        });
+
+        it('rejects initial stock on create (must use supply)', async () => {
+            await expect(createProductService({
+                name: 'Notebook',
+                price: '5000',
+                quantityInStock: '10',
+                sku: 'NB-003',
+                unit: 'un',
+                categoryId: 'cat1',
+            }, '64abc', '64def')).rejects.toThrow('suprimento ou retirada');
+            expect(mockCreateProductRepo).not.toHaveBeenCalled();
         });
 
         it('throws error when category not found', async () => {
@@ -141,6 +149,50 @@ describe('productService', () => {
                 expect.any(Object)
             );
         });
+
+        it('lists only active products by default', async () => {
+            mockGetProductsRepo.mockResolvedValue([]);
+            mockCountProductsRepo.mockResolvedValue(0);
+
+            await getProductsService({}, '64abc');
+
+            expect(mockGetProductsRepo.mock.calls[0][0]).toMatchObject({ tenantId: '64abc', isActive: true });
+        });
+
+        it('lists inactive products when isActive=false', async () => {
+            mockGetProductsRepo.mockResolvedValue([]);
+            mockCountProductsRepo.mockResolvedValue(0);
+
+            await getProductsService({ isActive: 'false' }, '64abc');
+
+            expect(mockGetProductsRepo.mock.calls[0][0]).toMatchObject({ isActive: false });
+        });
+
+        it('lists active and inactive products when isActive=all', async () => {
+            mockGetProductsRepo.mockResolvedValue([]);
+            mockCountProductsRepo.mockResolvedValue(0);
+
+            await getProductsService({ isActive: 'all' }, '64abc');
+
+            expect(mockGetProductsRepo.mock.calls[0][0]).not.toHaveProperty('isActive');
+        });
+
+        it('supports combined views: inactive, lowStock and all', async () => {
+            mockGetProductsRepo.mockResolvedValue([]);
+            mockCountProductsRepo.mockResolvedValue(0);
+
+            await getProductsService({ view: 'inactive' }, '64abc');
+            expect(mockGetProductsRepo.mock.calls[0][0]).toMatchObject({ isActive: false });
+
+            await getProductsService({ view: 'lowStock' }, '64abc');
+            expect(mockGetProductsRepo.mock.calls[1][0]).toMatchObject({
+                isActive: true,
+                $expr: { $lte: ['$quantityInStock', '$minStock'] },
+            });
+
+            await getProductsService({ view: 'all' }, '64abc');
+            expect(mockGetProductsRepo.mock.calls[2][0]).not.toHaveProperty('isActive');
+        });
     });
 
     describe('updateProductService', () => {
@@ -158,6 +210,14 @@ describe('productService', () => {
             mockGetProductByIdRepo.mockResolvedValue(null);
 
             await expect(updateProductService('p1', { name: 'Updated' }, '64abc', 'u1')).rejects.toMatchObject({ statusCode: 404 });
+        });
+
+        it('rejects direct stock change on update (must use supply/withdrawal)', async () => {
+            mockGetProductByIdRepo.mockResolvedValue({ _id: 'p1', sku: 'NB-001' });
+
+            await expect(updateProductService('p1', { quantityInStock: 50 }, '64abc', 'u1'))
+                .rejects.toMatchObject({ statusCode: 400 });
+            expect(mockUpdateProductRepo).not.toHaveBeenCalled();
         });
     });
 });

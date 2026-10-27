@@ -10,6 +10,8 @@ import { isEmpty } from "../../shared/utils/fieldsValidations.js";
 import { validateEnum, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
+import { hasPermission } from "../../shared/utils/permissionHelpers.js";
+import { withTransaction } from "../../shared/utils/transactionHelpers.js";
 
 const allowedTypes = ["in", "out", "adjust"];
 
@@ -20,19 +22,39 @@ const calculateNewQuantity = (current, type, quantity) => {
     return quantity; // adjust: valor absoluto
 };
 
-// Valida os campos obrigatórios de uma movimentação.
-const validateCreate = async (data, tenantId) => {
-    validateEnum(data.type, allowedTypes, "Tipo de movimentação");
+// Permissão exigida por tipo de movimentação manual: suprimento (in) e
+// retirada (out) exigem stock:supply; acerto de inventário exige stock:adjust.
+const permissionByType = { in: "supply", out: "supply", adjust: "adjust" };
 
+// Garante que o usuário tenha a permissão correspondente ao tipo da movimentação.
+const ensureMovementPermission = (type, actor) => {
+    if (!hasPermission(actor, "stock", permissionByType[type])) {
+        throwValidationError("Permissão negada para esta movimentação de estoque", 403);
+    }
+};
+
+// Valida os campos obrigatórios de uma movimentação.
+const validateCreate = async (data, tenantId, session) => {
     if (isEmpty(data.productId)) {
         throwValidationError("O produto é obrigatório");
     }
 
-    if (isNaN(data.quantity) || Number(data.quantity) < 0) {
+    // Suprimento/retirada precisam de quantidade maior que zero; o acerto
+    // aceita zero porque define o saldo final contado.
+    const quantity = Number(data.quantity);
+    if (isEmpty(data.quantity) || isNaN(quantity) || quantity < 0) {
         throwValidationError("A quantidade deve ser um número positivo");
     }
+    if (data.type !== "adjust" && quantity === 0) {
+        throwValidationError("A quantidade deve ser maior que zero");
+    }
 
-    const product = await getProductByIdRepo(data.productId, tenantId, false);
+    // Toda movimentação manual exige motivo para garantir rastreabilidade.
+    if (isEmpty(data.reason)) {
+        throwValidationError("O motivo é obrigatório para movimentações de estoque");
+    }
+
+    const product = await getProductByIdRepo(data.productId, tenantId, false, { session });
 
     if (!product) {
         throwValidationError("Produto não encontrado", 404);
@@ -48,27 +70,37 @@ const validateCreate = async (data, tenantId) => {
     return { product, currentQuantity, newQuantity };
 };
 
-// Registra uma nova movimentação de estoque e atualiza a quantidade do produto.
-export const createStockMovementService = async (data, tenantId, actorId) => {
-    const { product, currentQuantity, newQuantity } = await validateCreate(data, tenantId);
+// Registra uma movimentação manual de estoque (suprimento, retirada ou acerto)
+// e atualiza o saldo do produto. Única porta de entrada para alterar o estoque
+// fora das vendas: tudo ocorre em transação, gerando a movimentação e a
+// auditoria tanto da movimentação quanto da alteração do saldo do produto.
+export const createStockMovementService = async (data, tenantId, actor) => {
+    // Valida o tipo antes da permissão para responder 400 a tipos inválidos.
+    validateEnum(data.type, allowedTypes, "Tipo de movimentação");
+    ensureMovementPermission(data.type, actor);
 
-    await updateProductRepo(product._id, { quantityInStock: newQuantity }, tenantId);
+    return withTransaction(async (session) => {
+        const { product, currentQuantity, newQuantity } = await validateCreate(data, tenantId, session);
 
-    const movement = await createStockMovementRepo({
-        tenantId,
-        productId: product._id,
-        type: data.type,
-        quantity: Number(data.quantity),
-        previousQuantity: currentQuantity,
-        newQuantity,
-        reason: String(data.reason || "").trim(),
-        reference: String(data.reference || "").trim(),
-        createdBy: actorId,
+        const updatedProduct = await updateProductRepo(product._id, { quantityInStock: newQuantity }, tenantId, { session });
+
+        const movement = await createStockMovementRepo({
+            tenantId,
+            productId: product._id,
+            type: data.type,
+            quantity: Number(data.quantity),
+            previousQuantity: currentQuantity,
+            newQuantity,
+            reason: String(data.reason).trim(),
+            reference: String(data.reference || "").trim(),
+            createdBy: actor.id,
+        }, { session });
+
+        await auditAction("stock", "create", null, movement, actor.id, { session });
+        await auditAction("product", "update", product, updatedProduct, actor.id, { session });
+
+        return movement;
     });
-
-    await auditAction("stock", "create", null, movement, actorId);
-
-    return movement;
 };
 
 // Lista movimentações de estoque do tenant com paginação e filtros.

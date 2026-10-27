@@ -103,6 +103,32 @@ O `AuthContext` gerencia o estado da sessão no frontend:
 - Não armazena nem acessa o JWT, pois ele fica protegido no cookie `HttpOnly`
 - Restaura os dados da sessão automaticamente via `/auth/session` ao carregar
 
+## Área administrativa
+
+O layout autenticado usa menu lateral escuro, recolhível no desktop e sobreposto no celular, com grupos expansíveis e barra de rolagem no tema. Login e dashboard compartilham a identidade Stock-ly; indicadores são carregados da API, sem métricas fictícias.
+
+As páginas `/management/[screen]` incluem:
+
+| Rota | Funcionalidade |
+| --- | --- |
+| `/management/categories` | Cadastro e edição de categorias |
+| `/management/customers`, `/management/suppliers`, `/management/users` | Clientes, fornecedores e funcionários (usuários do sistema) |
+| `/management/products` | Catálogo com suprimento/retirada de estoque na linha (exige `stock:supply`) e filtro de busca (ativos, inativos, estoque baixo ou todos) |
+| `/management/movements` | Entradas, saídas e contagem por ajuste de saldo final |
+| `/management/pos`, `/management/orders` | PDV, detalhes, pagamentos e cancelamento de vendas |
+| `/management/cashiers` | Abertura, histórico, sangria, reforço e fechamento |
+| `/management/payables`, `/management/receivables` | Contas a pagar/receber e liquidação/cancelamento |
+| `/management/cash-flow`, `/management/reports` | Fluxo realizado e relatórios, com períodos em UTC |
+| `/management/company` | Dados editáveis da empresa, cores e upload de logo |
+| `/management/audit`, `/management/exports` | Auditoria e download paginado de CSV/JSON |
+| `/management/account` | Dados da sessão e acesso à recuperação de senha |
+
+O painel existente `/permissions` é reutilizado para presets e autorizações individuais. Para a modelagem inicial, o menu exibe todos os módulos; a API continua aplicando suas permissões e retorna erros de autorização normalmente. O refinamento de visibilidade por permissão e o painel exclusivo MASTER ficam para a próxima etapa.
+
+Usuários MASTER selecionam uma empresa no cabeçalho para operar nas novas telas. Não se trata de uma troca de identidade: as regras de autoria e permissões continuam sendo as do usuário autenticado. O dashboard também respeita a empresa selecionada.
+
+Limites atuais: funcionários não incluem RH; alteração de role de usuário existente continua restrita ao MASTER; a API não oferece edição de perfil por autoatendimento. Exportações contêm até 1.000 registros por arquivo/página e produtos mais vendidos exibem até 100 itens. Não há integração fiscal, histórico de compras de fornecedores ou módulo de compras nesta entrega.
+
 ## Regras de validação
 
 Toda validação de formulário deve existir tanto no frontend (UX rápida) quanto no backend (fonte confiável). Não confie apenas na validação do cliente.

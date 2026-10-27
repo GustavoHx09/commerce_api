@@ -8,8 +8,9 @@ import { successResponse } from "../../shared/utils/responseHelpers.js";
 import { ensureFound } from "../../shared/utils/controllerHelpers.js";
 
 // Cria uma nova movimentação de estoque e atualiza o produto.
+// A permissão por tipo (stock:supply / stock:adjust) é validada no service.
 export const createStockMovement = async (req, res) => {
-    const movement = await createStockMovementService(req.body, req.tenantId, req.user.id);
+    const movement = await createStockMovementService(req.body, req.tenantId, req.user);
     return successResponse(res, { movement }, "Movimentação registrada com sucesso", 201);
 };
 

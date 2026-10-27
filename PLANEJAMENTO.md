@@ -361,6 +361,24 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 - [x] Relatórios de vendas, produtos, estoque, movimentações e fluxo de caixa.
 - [x] Exportação de dados essenciais (produtos, clientes, fornecedores, categorias e pedidos) em CSV/JSON.
 
+### Interface administrativa dos clientes
+
+- [x] Menu lateral recolhível, responsivo e com grupos expansíveis e rolagem no tema escuro.
+- [x] Telas conectadas à API para cadastros, estoque, PDV/vendas, caixas, contas, relatórios, empresa, auditoria e exportação.
+- [x] Renovação visual de login e dashboard sem indicadores simulados.
+- [x] Seleção de empresa pelo MASTER para visualizar a área operacional do cliente.
+- [x] Pagamento combinado no PDV (múltiplos métodos), parcelas com juros configuráveis por tenant e campos CV/AUTO do cartão.
+- [x] Numeração sequencial de vendas por tenant e modal "Venda finalizada" com cupom 80mm para impressão.
+- [x] Caixa em tempo real: entrada de dinheiro das vendas, estorno no cancelamento, abertura travada no fechamento anterior e liquidação de contas via caixa (total ou combinada).
+- [x] Acerto de estoque restrito a `stock:adjust` com motivo obrigatório.
+- [x] Auditoria com entidades em português, nome do responsável e exportação/impressão.
+- [x] Suprimento/retirada de estoque na tela de produtos com permissão `stock:supply`, motivo obrigatório, transação e auditoria; "Posição de estoque" incorporada à tela de produtos.
+- [x] Cadastro/edição de produto não aceita alteração direta de `quantityInStock` — estoque só muda via movimentações.
+- [ ] Validar visualmente os fluxos autenticados e operações ponta a ponta com dados de uma empresa de teste.
+- [x] Refinar visibilidade de menus e ações pelas permissões efetivas de cada funcionário (sessão passa a retornar permissões efetivas).
+- [ ] Implementar o painel exclusivo MASTER com métricas da plataforma.
+- [ ] Definir autoatendimento de perfil e demais lacunas de API antes de expandir esses fluxos.
+
 ### Próximos passos
 
 1. Ativar recuperação de senha: backend e telas de forgot/reset prontos (Resend + token de uso único); falta criar a conta no Resend e configurar `RESEND_API_KEY`/`EMAIL_FROM`/`WEB_URL`.

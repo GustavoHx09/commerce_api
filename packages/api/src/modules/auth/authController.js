@@ -1,6 +1,7 @@
 import { authenticateUser, revokeToken } from "./authService.js";
 import { requestPasswordReset, resetPassword } from "./passwordResetService.js";
 import { successResponse } from "../../shared/utils/responseHelpers.js";
+import { getPermissions } from "../../shared/utils/permissionHelpers.js";
 
 // Nome do cookie HttpOnly que mantém a sessão autenticada no navegador.
 export const AUTH_COOKIE = "authToken";
@@ -25,11 +26,13 @@ export const login = async (req, res) => {
 };
 
 // Retorna os dados da sessão decodificados pelo middleware de autenticação.
+// Inclui a lista efetiva de permissões para o frontend esconder ações não
+// permitidas (o backend continua validando cada rota).
 export const getSession = async (req, res) => {
     const { id, name, email, role, tenantId } = req.user;
 
     return successResponse(res, {
-        user: { id, name, email, role, tenantId },
+        user: { id, name, email, role, tenantId, permissions: getPermissions(req.user) },
     }, "Sessão autenticada");
 };
 

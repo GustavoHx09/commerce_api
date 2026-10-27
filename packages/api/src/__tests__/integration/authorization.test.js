@@ -42,6 +42,15 @@ describe('granular authorization integration', () => {
             revokedPermissions: ['orders:delete'],
         });
 
+        // Funcionário comum (role user): não recebe stock:supply por padrão.
+        await createUser({
+            name: 'Plain User',
+            email: 'plain-user@test.com',
+            password: 'user123',
+            role: 'user',
+            tenantId: tenant._id,
+        });
+
         readerAgent = (await loginAgent(app, readerUser.email, 'user123')).agent;
         writerAgent = (await loginAgent(app, writerUser.email, 'user123')).agent;
         restrictedAgent = (await loginAgent(app, restrictedUser.email, 'user123')).agent;
@@ -108,5 +117,39 @@ describe('granular authorization integration', () => {
 
         const cancelRes = await restrictedAgent.put(`/api/v1/orders/${orderId}/cancel`).send({ cancelReason: 'Test' });
         expect(cancelRes.status).toBe(403);
+    });
+
+    it('blocks manual stock movement for role user without stock:supply', async () => {
+        const userAgent = (await loginAgent(app, 'plain-user@test.com', 'user123')).agent;
+        const product = await createProduct(tenant._id, category._id, {
+            name: 'Stock Authz Product',
+            sku: 'SKU-STOCK-AUTHZ-001',
+        });
+
+        const res = await userAgent.post('/api/v1/stock/movements').send({
+            productId: product._id.toString(),
+            type: 'in',
+            quantity: 5,
+            reason: 'Compra',
+        });
+        expect(res.status).toBe(403);
+    });
+
+    it('allows manual stock movement for admin (stock:supply default)', async () => {
+        const product = await createProduct(tenant._id, category._id, {
+            name: 'Stock Admin Product',
+            sku: 'SKU-STOCK-ADMIN-001',
+        });
+
+        const res = await writerAgent.post('/api/v1/stock/movements').send({
+            productId: product._id.toString(),
+            type: 'in',
+            quantity: 5,
+            reason: 'Compra',
+        });
+        expect(res.status).toBe(201);
+
+        const productRes = await writerAgent.get(`/api/v1/products/${product._id}`);
+        expect(productRes.body.data.product.quantityInStock).toBe(5);
     });
 });

@@ -177,10 +177,10 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 | `/stock` | Movimentações de estoque (entrada/saída/ajuste) e alertas |
 | `/customers` | Cadastro de clientes (CPF/CNPJ único por tenant) |
 | `/suppliers` | Cadastro de fornecedores (CPF/CNPJ único por tenant) |
-| `/cashiers` | Caixa: abertura, fechamento, sangria e suprimento |
-| `/orders` | Pedidos/vendas (PDV) com baixa/estorno de estoque |
-| `/payments` | Pagamentos vinculados a pedidos |
-| `/bills` | Contas a pagar e receber |
+| `/cashiers` | Caixa: abertura (herda o fechamento anterior), sangria/suprimento e movimentações em tempo real de vendas, estornos e contas |
+| `/orders` | Pedidos/vendas (PDV) com numeração sequencial por tenant, pagamento combinado e baixa/estorno de estoque |
+| `/payments` | Pagamentos vinculados a pedidos: parcelas e juros do crédito, CV e código de autorização da maquininha |
+| `/bills` | Contas a pagar e receber com liquidação total/parcial via caixa aberto |
 | `/dashboard` | Vendas do dia/semana/mês, estoque baixo, total em caixa e dados do tenant |
 | `/reports` | Relatórios de vendas, produtos mais vendidos, estoque, movimentações e fluxo de caixa |
 | `/export` | Exportação de categorias, produtos, clientes, fornecedores e pedidos em CSV/JSON |
@@ -202,6 +202,13 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 - Clientes e fornecedores com documento (CPF/CNPJ) validado e único por tenant
 - Movimentações de estoque registram histórico e impedem quantidade negativa
 - Caixa, vendas e pagamentos com baixa/estorno atômico de estoque via transações do MongoDB
+- Saldo do caixa derivado exclusivamente de movimentações registradas em tempo real (vendas em dinheiro, estornos, sangrias, reforços e contas)
+- Abertura de caixa travada no saldo de fechamento anterior a partir do segundo caixa do tenant (regra validada no backend)
+- Modo de operação do caixa configurável por tenant em `/tenants/me` (`cashierMode`): `per_operator` (um caixa aberto por usuário, padrão) ou `shared` (um caixa único compartilhado por todos os operadores da empresa)
+- Pagamento combinado por venda (múltiplos métodos) com troco apenas em dinheiro e juros de crédito configuráveis por parcela em `/tenants/me` (`paymentFees`)
+- O saldo em estoque só é alterado por movimentações: suprimento (`in`) e retirada (`out`) exigem a permissão `stock:supply`, acerto de inventário (`adjust`) exige `stock:adjust` — todos com motivo obrigatório, em transação e com auditoria da movimentação e do produto
+- O cadastro/edição de produto rejeita `quantityInStock`: não é possível burlar a rastreabilidade alterando o saldo direto na entidade
+- A listagem de produtos retorna somente ativos por padrão e aceita a visão combinada `view` (`active`, `inactive`, `lowStock`, `all`) além dos parâmetros `isActive`/`minStockAlert`
 - Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações
 - Soft delete e índices de unicidade parciais por tenant
 - Comentários explicativos padronizados no código

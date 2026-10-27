@@ -27,6 +27,10 @@ export const SYSTEM_PERMISSIONS = [
     "bills:delete",
     "stock:read",
     "stock:write",
+    // Suprimento (entrada) e retirada (saída) manual de estoque — rastreadas
+    // em movimentações e auditoria.
+    "stock:supply",
+    "stock:adjust",
     "orders:read",
     "orders:write",
     "orders:delete",

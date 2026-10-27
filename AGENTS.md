@@ -95,6 +95,15 @@ modules/<nome>/
 - Toda operação de escrita em entidades do sistema (**create, update, delete, restore**) deve chamar `auditAction` registrando estado anterior e novo.
 - A auditoria registra quem fez (`actor.id`), o que mudou e quando — não remova essas chamadas ao refatorar services.
 - Consultas de leitura não precisam de auditoria, exceto se a regra de negócio pedir.
+- Alterações de saldo/financeiro (caixa, estoque, produtos, vendas) devem gerar **dois registros quando aplicável**: a entidade operacional (movimentação, venda, caixa) e a entidade afetada (produto com saldo alterado, caixa com saldo atualizado), cada uma auditada na sua própria categoria (`entityType`).
+
+## 10.1. Rastreabilidade do estoque
+
+- O saldo de um produto **nunca** pode ser alterado diretamente no cadastro (`create`/`update` de produto rejeitam `quantityInStock`).
+- Toda entrada ou saída manual de estoque passa por `POST /stock/movements`: `in` (suprimento) e `out` (retirada) exigem `stock:supply`; `adjust` (acerto de inventário) exige `stock:adjust`.
+- Toda movimentação manual exige `reason` (motivo) obrigatória — sem movimentação sem rastro.
+- Vendas e cancelamentos também devem registrar movimentações de estoque correspondentes dentro da mesma transação.
+- Novos tipos de movimentação devem seguir o mesmo padrão: permissão dedicada, motivo obrigatório, transação e auditoria.
 
 ## 11. Multi-tenant e segurança
 

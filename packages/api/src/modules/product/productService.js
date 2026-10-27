@@ -9,12 +9,12 @@ import {
     restoreProductRepo,
     hardDeleteProductRepo,
 } from "./productRepo.js";
-import { getCategoryByIdRepo } from "../category/categoryRepo.js";
+import { getCategoryByIdRepo, getCategoryIdsByNameRepo } from "../category/categoryRepo.js";
 import { countStockMovementsByProductRepo } from "../stock/stockMovementRepo.js";
 import { countOrdersByProductRepo } from "../order/orderRepo.js";
 import { isEmpty } from "../../shared/utils/fieldsValidations.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
-import { sanitizeNumberFields, throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { sanitizeNumberFields, throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 import { auditAction } from "../audit/auditHelpers.js";
 
@@ -25,7 +25,15 @@ const VALID_UNITS = ["un", "kg", "g", "lt", "ml", "m", "cm", "par", "cx"];
 const requiredCreateFields = ["name", "price", "sku", "unit", "categoryId"];
 
 // Campos numéricos que devem ser validados e convertidos.
-const numericFields = ["price", "costPrice", "quantityInStock", "minStock"];
+const numericFields = ["price", "costPrice", "minStock"];
+
+// O saldo em estoque nunca é alterado pelo cadastro do produto: toda entrada
+// ou saída passa por suprimento/retirada (movimentação + auditoria) ou venda.
+const ensureNoDirectStockChange = (data) => {
+    if (data.quantityInStock !== undefined) {
+        throwValidationError("O estoque só pode ser alterado por suprimento ou retirada");
+    }
+};
 
 // Normaliza a unidade de medida para minúsculas e valida o valor.
 const normalizeUnit = (unit) => {
@@ -68,6 +76,7 @@ const validateCreate = async (data, tenantId) => {
         throwValidationError(`Campos obrigatórios faltando: ${missing.join(", ")}`);
     }
 
+    ensureNoDirectStockChange(data);
     sanitizeNumberFields(data, numericFields);
     data.unit = normalizeUnit(data.unit);
     data.sku = String(data.sku).toUpperCase().trim();
@@ -81,6 +90,7 @@ const validateUpdate = async (data, product, tenantId) => {
     if (data.name === "") throwValidationError("O nome do produto é obrigatório");
     if (data.sku === "") throwValidationError("O SKU do produto é obrigatório");
 
+    ensureNoDirectStockChange(data);
     sanitizeNumberFields(data, numericFields);
 
     if (data.unit !== undefined) {
@@ -140,16 +150,35 @@ export const getProductsService = async (query, tenantId, includeDeleted = false
         filter.price = { ...filter.price, $lte: Number(query.maxPrice) };
     }
 
-    if (query.minStockAlert) {
+    // Visão da listagem ("view"): active (padrão), inactive, lowStock ou all.
+    // Os parâmetros legados isActive/minStockAlert continuam aceitos.
+    const view = query.view;
+
+    if (view === "all") {
+        // Todos: sem filtro de situação.
+    } else if (view === "inactive") {
+        filter.isActive = false;
+    } else if (query.isActive === "all") {
+        // Legado: sem filtro de situação.
+    } else if (query.isActive === "false") {
+        filter.isActive = false;
+    } else {
+        filter.isActive = true;
+    }
+
+    if (view === "lowStock" || query.minStockAlert) {
         filter.$expr = { $lte: ["$quantityInStock", "$minStock"] };
     }
 
     if (query.search) {
         const term = query.search.trim();
+        // Também casa produtos cuja categoria corresponde ao termo buscado.
+        const matchingCategories = await getCategoryIdsByNameRepo(tenantId, accentInsensitiveRegex(term));
         filter.$or = [
-            { name: { $regex: term, $options: "i" } },
-            { description: { $regex: term, $options: "i" } },
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
+            { description: { $regex: accentInsensitiveRegex(term), $options: "i" } },
             { sku: { $regex: term, $options: "i" } },
+            { categoryId: { $in: matchingCategories } },
         ];
     }
 

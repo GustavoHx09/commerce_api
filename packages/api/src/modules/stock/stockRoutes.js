@@ -14,7 +14,9 @@ import { asyncHandler } from "../../shared/middlewares/asyncHandler.js";
 const router = Router();
 
 router.get("/movements", authMiddleware, tenantMiddleware, authorize("stock", "read"), asyncHandler(getStockMovements));
-router.post("/movements", authMiddleware, tenantMiddleware, authorize("stock", "write"), asyncHandler(createStockMovement));
+// Suprimento/retirada exigem stock:supply e acerto exige stock:adjust —
+// a checagem por tipo acontece no service, por isso não há authorize fixo aqui.
+router.post("/movements", authMiddleware, tenantMiddleware, asyncHandler(createStockMovement));
 router.get("/movements/:id", authMiddleware, tenantMiddleware, validateObjectId(), authorize("stock", "read"), asyncHandler(getStockMovementById));
 router.get("/low-stock", authMiddleware, tenantMiddleware, authorize("stock", "read"), asyncHandler(getLowStock));
 

@@ -14,6 +14,8 @@ interface User {
   email: string;
   role: string;
   tenantId: string | null;
+  // Permissões efetivas retornadas por /auth/session (usadas só para UX).
+  permissions?: string[];
 }
 
 interface Tenant {
@@ -25,6 +27,19 @@ interface Tenant {
     primary?: string;
     secondary?: string;
   };
+  // Dados fiscais/comerciais usados no cabeçalho do cupom de venda.
+  document?: string;
+  documentType?: 'cpf' | 'cnpj';
+  phone?: string;
+  address?: {
+    street?: string;
+    number?: string;
+    complement?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
 }
 
 interface AuthContextData {
@@ -33,6 +48,7 @@ interface AuthContextData {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextData | undefined>(undefined);
@@ -76,7 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // O backend grava o JWT no cookie e retorna apenas os dados públicos do usuário.
   const login = async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password });
+    await api.post('/auth/login', { email, password });
+    // Após o login, carrega a sessão completa (inclui permissões efetivas).
+    const response = await api.get('/auth/session');
     setUser(response.data.data.user);
     await fetchTenant(response.data.data.user.tenantId);
   };
@@ -91,8 +109,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Recarrega os dados da sessão (nome do usuário, empresa) sem reload da página.
+  // Usado após edições de perfil ou da empresa para refletir no cabeçalho.
+  const refreshSession = async () => {
+    try {
+      const response = await api.get('/auth/session');
+      setUser(response.data.data.user);
+      await fetchTenant(response.data.data.user.tenantId);
+    } catch {
+      // Mantém a sessão local se a recarga falhar.
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, tenant, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, tenant, isLoading, login, logout, refreshSession }}
+    >
       {children}
     </AuthContext.Provider>
   );

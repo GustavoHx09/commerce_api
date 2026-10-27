@@ -25,6 +25,12 @@ commerce_api/
 
 Os packages funcionam de forma independente, mas compartilham scripts gerenciados pela raiz do monorepo.
 
+## Interface administrativa dos clientes
+
+O frontend possui navegação lateral recolhível e telas integradas à API para catálogo, clientes, fornecedores, funcionários, estoque/inventário, PDV, vendas, caixa, financeiro, relatórios, empresa, auditoria e exportações. O login e o dashboard seguem a identidade visual Stock-ly, com layout responsivo. Consulte `packages/web/README.md` para rotas e limites da entrega.
+
+A visibilidade granular dos menus será refinada posteriormente, sem remover as autorizações do backend. O painel exclusivo MASTER permanece fora desta etapa; o MASTER pode selecionar uma empresa para visualizar a área administrativa do cliente.
+
 ## Requisitos
 
 - Node.js (versão LTS recomendada)

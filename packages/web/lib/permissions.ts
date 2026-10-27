@@ -15,9 +15,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'categories:read', 'categories:write', 'categories:delete',
     'customers:read', 'customers:write', 'customers:delete',
     'suppliers:read', 'suppliers:write', 'suppliers:delete',
-    'stock:read', 'stock:write',
+    'stock:read', 'stock:write', 'stock:supply', 'stock:adjust',
     'orders:read', 'orders:write', 'orders:delete',
     'cashier:read', 'cashier:write',
+    'bills:read', 'bills:write', 'bills:delete',
+    'payments:read',
     'reports:read',
     'audit:read',
   ],
@@ -55,6 +57,24 @@ export const ACTION_LABELS: Record<string, string> = {
   read: 'Leitura',
   write: 'Escrita',
   delete: 'Exclusão',
+  adjust: 'Acerto de estoque',
+  supply: 'Suprimento/retirada',
+};
+
+// Verifica no cliente se o usuário possui uma permissão (apenas para UX —
+// o backend reforça a mesma regra via hasPermission). Considera curingas
+// "*" e "recurso:*" vindos da lista efetiva retornada pela sessão.
+export const hasPermission = (
+  permissions: string[] | undefined,
+  permission: string,
+) => {
+  const list = permissions || [];
+  const resource = permission.split(':')[0];
+  return (
+    list.includes('*') ||
+    list.includes(`${resource}:*`) ||
+    list.includes(permission)
+  );
 };
 
 // Agrupa as permissões do catálogo por recurso mantendo a ordem de chegada.
