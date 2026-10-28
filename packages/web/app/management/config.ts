@@ -106,7 +106,8 @@ const billFields: Field[] = [
 const billColumns: [string, string][] = [
   ['description', 'Descrição'],
   ['amount', 'Valor'],
-  ['dueDate', 'Vencimento'],
+  // "@date" exibe só a data do vencimento, sem a hora.
+  ['dueDate@date', 'Vencimento'],
   ['status', 'Situação'],
 ];
 const billFilters: Field[] = [
@@ -300,6 +301,7 @@ export const screens: Record<string, Screen> = {
     endpoint: '/cashiers',
     detailKey: 'cashier',
     columns: [
+      ['cashierNumber', 'Caixa'],
       ['openedAt', 'Abertura'],
       ['openedBy', 'Responsável'],
       ['initialAmount', 'Valor inicial'],
@@ -378,6 +380,8 @@ export const screens: Record<string, Screen> = {
 
 export const labels: Record<string, string> = {
   paid: 'Finalizada',
+  pay: 'A pagar',
+  receive: 'A receber',
   pending: 'Pendente',
   cancelled: 'Cancelada',
   canceled: 'Cancelada',
@@ -500,10 +504,17 @@ export function display(value: unknown, key = ''): string {
   if (typeof value === 'object') {
     const row = value as Row;
     return String(
-      row.name || row.displayName || row.description || row._id || '—'
+      row.name ||
+        row.displayName ||
+        row.description ||
+        // Caixas populados exibem o número sequencial (#3), não o _id.
+        (row.cashierNumber != null ? `#${row.cashierNumber}` : null) ||
+        row._id ||
+        '—'
     );
   }
-  if (key === 'orderNumber') return `#${String(value)}`;
+  if (key === 'orderNumber' || key === 'cashierNumber')
+    return `#${String(value)}`;
   // Documentos, CEP e telefone sempre exibidos formatados.
   if (['document', 'cpf'].includes(key)) return formatDocument(value);
   if (key === 'zipCode') return formatCep(value);
@@ -514,6 +525,9 @@ export function display(value: unknown, key = ''): string {
   // Colunas com sufixo "@date" exibem somente a data; os detalhes
   // continuam mostrando data e hora completas.
   if (key.endsWith('@date'))
+    return new Date(String(value)).toLocaleDateString('pt-BR');
+  // Vencimento é uma data pura: nunca exibe hora, nem nos detalhes.
+  if (key === 'dueDate')
     return new Date(String(value)).toLocaleDateString('pt-BR');
   if (/At$|Date$/.test(key) || ['start', 'end'].includes(key))
     return new Date(String(value)).toLocaleString('pt-BR');

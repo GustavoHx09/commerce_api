@@ -80,6 +80,7 @@ const detailLabels: Record<string, string> = {
   amount: 'Valor',
   dueDate: 'Vencimento',
   paidAt: 'Liquidada em',
+  contactId: 'Contato',
   notes: 'Observações',
   type: 'Tipo',
   reason: 'Motivo',
@@ -96,6 +97,7 @@ const detailLabels: Record<string, string> = {
   to: 'Novo',
   method: 'Forma de pagamento',
   orderNumber: 'Nº da venda',
+  cashierNumber: 'Nº do caixa',
   fiscalNumber: 'Nº fiscal',
   installments: 'Parcelas',
   interestPercent: 'Juros (%)',
@@ -129,6 +131,12 @@ const canCancelOrder = (row: Row, role?: string) =>
   ['admin', 'master'].includes(role || '') ||
   Date.now() - new Date(String(row.createdAt)).getTime() <= 30 * 60 * 1000;
 
+// Estorno de conta segue a mesma regra do cancelamento de venda, só que a
+// janela conta a partir da liquidação (paidAt), não da criação.
+const canReverseBill = (row: Row, role?: string) =>
+  ['admin', 'master'].includes(role || '') ||
+  Date.now() - new Date(String(row.paidAt)).getTime() <= 30 * 60 * 1000;
+
 const hiddenFields = new Set([
   '_id',
   'password',
@@ -137,6 +145,8 @@ const hiddenFields = new Set([
   '__v',
   'deletedAt',
   'permissionPresetId',
+  // Campo legado presente em contas criadas pelo seed antigo — fora do schema.
+  'supplierId',
   'permissions',
   'revokedPermissions',
   'snapshot',
@@ -424,8 +434,48 @@ function EditableDetails({
       // "Criado em" é redundante com "Última atualização"; descrição foi
       // removida do formulário de produtos e não aparece nos detalhes.
       key !== 'createdAt' &&
-      key !== 'description'
+      key !== 'description' &&
+      // Em contas, "Tipo" (a pagar/a receber) já é a própria tela e "Ativo"
+      // não agrega — soft delete nunca chega visível aqui. Dados da
+      // liquidação (caixa, valores, meio externo) só aparecem depois de paga.
+      !(endpoint === '/bills' &&
+        (key === 'type' ||
+          key === 'isActive' ||
+          (row.status !== 'paid' &&
+            [
+              'cashierId',
+              'cashierAmount',
+              'externalAmount',
+              'externalMethod',
+            ].includes(key))))
   );
+
+  // Em contas, "Liquidada em" e "Última atualização" rendem juntos e a
+  // "Situação" fecha a grade — sempre lado a lado e nessa ordem.
+  const pairTail =
+    endpoint === '/bills' ? ['paidAt', 'updatedAt', 'status'] : [];
+  const readOnlyTail = pairTail
+    .map((key) => readOnly.find(([k]) => k === key))
+    .filter((entry): entry is [string, unknown] => Boolean(entry));
+  const readOnlyMain = readOnly.filter(([k]) => !pairTail.includes(k));
+
+  // Ordem fixa dos cards em contas: quem registrou primeiro, depois o
+  // contato e o bloco da liquidação (caixa e valores).
+  if (endpoint === '/bills') {
+    const order = [
+      'createdBy',
+      'contactId',
+      'cashierId',
+      'cashierAmount',
+      'externalAmount',
+      'externalMethod',
+    ];
+    readOnlyMain.sort(
+      ([a], [b]) =>
+        (order.indexOf(a) === -1 ? order.length : order.indexOf(a)) -
+        (order.indexOf(b) === -1 ? order.length : order.indexOf(b))
+    );
+  }
 
   const fieldCell = 'px-4 py-2.5 text-sm';
   const fieldHead =
@@ -540,14 +590,29 @@ function EditableDetails({
     <div>
       <Notice error={error} />
       {/* Campos do sistema (criador, última atualização etc.) no topo. */}
-      {readOnly.length > 0 && (
+      {readOnlyMain.length > 0 && (
         <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-          {readOnly.map(([key, value]) => (
+          {readOnlyMain.map(([key, value]) => (
             <div key={key} className={detailBoxClass}>
               <dt className={detailLabelClass}>{detailLabels[key] || key}</dt>
               <dd className={`break-words ${detailValueClass}`}>
                 {/* Objetos populados (ex.: criador) exibem só o nome — sem
                     card aninhado dentro do card. */}
+                {display(value, key)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {/* Par fixo no fim da grade (ex.: Liquidada em + Última atualização
+          em contas) — sempre lado a lado, independente da quantidade de
+          cards acima. */}
+      {readOnlyTail.length > 0 && (
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          {readOnlyTail.map(([key, value]) => (
+            <div key={key} className={detailBoxClass}>
+              <dt className={detailLabelClass}>{detailLabels[key] || key}</dt>
+              <dd className={`break-words ${detailValueClass}`}>
                 {display(value, key)}
               </dd>
             </div>
@@ -905,6 +970,18 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
     else await client.put(`${url}/${action.name}`, payload);
     setAction(null);
     setMessage('Operação concluída com sucesso.');
+    // Se a ação partiu dos detalhes (ex.: cancelar conta), recarrega o
+    // registro para o modal refletir a nova situação sem fechar.
+    if (details && details._id === action.row._id && screen.detailKey) {
+      try {
+        const response = await client.get(
+          `${screen.endpoint}/${action.row._id}`
+        );
+        setDetails(response.data.data[screen.detailKey]);
+      } catch {
+        setDetails(null);
+      }
+    }
     await load();
   };
   const actionFields: Field[] =
@@ -1288,9 +1365,13 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                               (name === 'close' ||
                                 display(row.openedBy) === user?.id ||
                                 (row.openedBy as Row)?._id === user?.id)
-                            : name === 'pay'
-                              ? row.status === 'pending'
-                              : row.status !== 'cancelled'
+                            // Contas a pagar/receber: ações só dentro dos
+                            // detalhes — a linha fica só com "Detalhes".
+                            : screen.endpoint === '/bills'
+                              ? false
+                              : name === 'pay'
+                                ? row.status === 'pending'
+                                : row.status !== 'cancelled'
                       )
                       .map(([name, title]) => (
                         <button
@@ -1389,7 +1470,12 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               fields={screen.fields}
               endpoint={screen.endpoint}
               detailKey={screen.detailKey}
-              canEdit={canEdit}
+              // Só conta pendente pode ser editada; liquidada/cancelada
+              // vira registro histórico somente leitura.
+              canEdit={
+                canEdit &&
+                (screen.endpoint !== '/bills' || details.status === 'pending')
+              }
               actions={
                 screen.endpoint === '/products' &&
                 details.isActive !== false &&
@@ -1431,6 +1517,57 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                   >
                     Permissões
                   </button>
+                ) : screen.endpoint === '/bills' ? (
+                  // Conta pendente: baixar ou cancelar. Conta liquidada:
+                  // apenas estornar (devolve ao caixa e volta a pendente).
+                  <>
+                    {details.status === 'pending' && (
+                      <>
+                        <button
+                          className="admin-secondary"
+                          onClick={() =>
+                            setAction({
+                              row: details,
+                              name: 'pay',
+                              title:
+                                screen.actions?.find(([n]) => n === 'pay')?.[1] ||
+                                'Registrar baixa',
+                            })
+                          }
+                        >
+                          {screen.actions?.find(([n]) => n === 'pay')?.[1] ||
+                            'Registrar baixa'}
+                        </button>
+                        <button
+                          className={dangerButtonClass}
+                          onClick={() =>
+                            setAction({
+                              row: details,
+                              name: 'cancel',
+                              title: 'Cancelar conta',
+                            })
+                          }
+                        >
+                          Cancelar conta
+                        </button>
+                      </>
+                    )}
+                    {details.status === 'paid' &&
+                      canReverseBill(details, user?.role) && (
+                        <button
+                          className="admin-secondary"
+                          onClick={() =>
+                            setAction({
+                              row: details,
+                              name: 'reverse',
+                              title: 'Estornar pagamento',
+                            })
+                          }
+                        >
+                          Estornar pagamento
+                        </button>
+                      )}
+                  </>
                 ) : undefined
               }
               onSaved={(updated) => {
@@ -1589,8 +1726,21 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           bill={action.row}
           onClose={() => setAction(null)}
           onDone={async () => {
+            const bill = action.row;
             setAction(null);
             setMessage('Operação concluída com sucesso.');
+            // Se a baixa partiu dos detalhes, recarrega a conta para o
+            // modal mostrar a nova situação (liquidada em, valores, etc.).
+            if (details && details._id === bill._id && screen.detailKey) {
+              try {
+                const response = await client.get(
+                  `${screen.endpoint}/${bill._id}`
+                );
+                setDetails(response.data.data[screen.detailKey]);
+              } catch {
+                setDetails(null);
+              }
+            }
             await load();
           }}
         />
@@ -1602,7 +1752,11 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               ? 'O cancelamento estorna o estoque e cancela os pagamentos vinculados. Confirme para continuar.'
               : action.name === 'close'
                 ? 'O fechamento calcula o saldo final e encerra este caixa. Confirme para continuar.'
-                : 'Confira os dados antes de confirmar a operação.'}
+                : action.name === 'reverse' && screen.endpoint === '/bills'
+                  ? 'O estorno devolve o valor ao caixa de origem e a conta volta para pendente. Só é possível com o caixa ainda aberto. Confirme para continuar.'
+                  : action.name === 'delete' && screen.endpoint === '/bills'
+                    ? 'A conta pendente será removida da listagem. Confirme para continuar.'
+                    : 'Confira os dados antes de confirmar a operação.'}
           </p>
           <RecordForm
             fields={actionFields}
