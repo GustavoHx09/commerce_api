@@ -88,11 +88,23 @@ export default function PresetForm({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="mb-4 text-xl font-bold text-gray-900">
-          {isEditing ? `Editar preset: ${preset.name}` : 'Novo preset'}
-        </h2>
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-lg">
+        {/* Cabeçalho fixo que acompanha a rolagem, com título e botão de fechar. */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {isEditing ? `Editar preset: ${preset.name}` : 'Novo preset'}
+          </h2>
+          <button
+            type="button"
+            onClick={() => onClose(false)}
+            className="rounded-md border border-gray-300 px-3 py-1 text-gray-700 transition hover:bg-gray-50"
+            aria-label="Fechar janela"
+          >
+            ×
+          </button>
+        </div>
 
+        <div className="p-6">
         {isEditing && affectedUsers > 0 && hasChangesToPermissions && (
           <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
             Atenção: este preset está vinculado a {affectedUsers} usuário(s). As
@@ -169,6 +181,7 @@ export default function PresetForm({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

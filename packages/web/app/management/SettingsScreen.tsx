@@ -85,7 +85,9 @@ export function CompanyScreen() {
               setMessage('Taxas de pagamento salvas.');
             }}
           />
+          {/* A key remonta a seção quando o modo salvo muda, resetando o estado local. */}
           <CashierModeSection
+            key={String(company.cashierMode || 'per_operator')}
             mode={String(company.cashierMode || 'per_operator')}
             onSaved={(cashierMode) => {
               setCompany({ ...company, cashierMode });
@@ -418,7 +420,6 @@ function CashierModeSection({
   const [value, setValue] = useState(mode);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => setValue(mode), [mode]);
 
   return (
     <section className="admin-panel">

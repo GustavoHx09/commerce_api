@@ -37,7 +37,8 @@ Regras e padrões que devem ser seguidos antes e durante qualquer alteração no
 
 ## 6. Antes de finalizar
 
-- Rode os testes/verificações disponíveis (tsc, lint, build, etc.).
+- **Sempre** rode o lint ao terminar qualquer tarefa, sem exceção: `npm run lint -w api` e `npm run lint -w web`. Se alterou só um pacote, ainda assim rode o lint dele.
+- Rode os testes/verificações disponíveis (tsc, build, etc.).
 - Valide que a mudança não quebrou fluxos adjacentes.
 - Resuma o que foi alterado ao usuário.
 

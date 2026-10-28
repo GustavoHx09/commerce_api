@@ -155,7 +155,7 @@ export const payBillService = async (id, data = {}, tenantId, actorId) => {
 
         const total = Number(previous.amount);
         let cashierAmount = 0;
-        let externalAmount = 0;
+        let externalAmount;
         let externalMethod = null;
         let cashier = null;
 

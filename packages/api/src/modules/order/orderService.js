@@ -166,7 +166,7 @@ const processPayments = async (paymentsInput, orderId, orderNumber, cashierId, t
 
         let installments = null;
         let interestPercent = 0;
-        let base = amount;
+        let base;
         let interestAmount = 0;
 
         if (payment.method === "credit_card") {

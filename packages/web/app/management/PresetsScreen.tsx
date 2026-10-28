@@ -1,6 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import Link from 'next/link';
 import { useWorkspaceApi } from '../AdminShell';
 import { useAuth } from '../context/AuthContext';
@@ -75,8 +81,12 @@ export default function PresetsScreen() {
     }
   }, [client, tenantId]);
 
+  // startTransition evita setState síncrono no corpo do effect (o load
+  // seta loading/erro assim que inicia).
   useEffect(() => {
-    void load();
+    startTransition(() => {
+      void load();
+    });
   }, [load]);
 
   const linkedUsers = useCallback(

@@ -797,7 +797,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
     } finally {
       setLoading(false);
     }
-  }, [client, tenantId, screen, applied, page, isProducts, productsSearched]);
+  }, [client, tenantId, screen, applied, page, isProducts, productsSearched, isCashiers, user?.id]);
   useEffect(() => {
     startTransition(() => {
       void load();

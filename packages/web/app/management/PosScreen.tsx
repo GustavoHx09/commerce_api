@@ -145,11 +145,13 @@ export default function PosScreen() {
   // Busca clientes sob demanda conforme o operador digita (nome, CPF/CNPJ, telefone).
   useEffect(() => {
     const term = customerQuery.trim();
-    if (!tenantId || !term) {
-      setCustomerResults([]);
-      return;
-    }
+    // Busca e limpeza de resultados rodam dentro do debounce para não
+    // chamar setState de forma síncrona no corpo do effect.
     const timer = setTimeout(async () => {
+      if (!tenantId || !term) {
+        setCustomerResults([]);
+        return;
+      }
       try {
         const response = await client.get('/customers', {
           params: { search: term, isActive: 'true', limit: 8 },

@@ -31,7 +31,7 @@ jobs:
         run: npm test -w api
 
   web:
-    name: Web — build
+    name: Web — lint, type-check e build
     runs-on: ubuntu-latest
 
     env:
@@ -49,6 +49,12 @@ jobs:
 
       - name: Instalar dependências
         run: npm ci
+
+      - name: Lint
+        run: npm run lint -w web
+
+      - name: Type-check
+        run: npm run type-check -w web
 
       - name: Build
         run: npm run build -w web
