@@ -38,6 +38,13 @@ const validateBill = (data) => {
         throwValidationError("Data de vencimento invalida");
     }
 
+    // Vencimento não pode ser no passado — compara só a data, sem hora.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(data.dueDate) < today) {
+        throwValidationError("Data de vencimento deve ser hoje ou uma data futura");
+    }
+
     if (data.status && !VALID_STATUSES.includes(data.status)) {
         throwValidationError("Status invalido");
     }
@@ -56,7 +63,10 @@ export const createBillService = async (data, tenantId, actorId) => {
         status: data.status || "pending",
         paidAt: data.status === "paid" ? new Date() : null,
         contactId: data.contactId || null,
-        contactType: data.contactType || null,
+        // Sem contactType explícito, infere pelo tipo da conta: pagar →
+        // fornecedor, receber → cliente.
+        contactType: data.contactType ||
+            (data.contactId ? (data.type === "pay" ? "suppliers" : "customers") : null),
         notes: data.notes ? String(data.notes).trim() : null,
         createdBy: actorId,
     });
@@ -121,10 +131,22 @@ export const updateBillService = async (id, data, tenantId, actorId) => {
         if (!isValidDate(data.dueDate)) {
             throwValidationError("Data de vencimento invalida");
         }
+        // Mesma regra da criação: vencimento não pode ser no passado.
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (new Date(data.dueDate) < today) {
+            throwValidationError("Data de vencimento deve ser hoje ou uma data futura");
+        }
         update.dueDate = new Date(data.dueDate);
     }
     if (data.notes !== undefined) update.notes = data.notes ? String(data.notes).trim() : null;
-    if (data.contactId !== undefined) update.contactId = data.contactId || null;
+    if (data.contactId !== undefined) {
+        update.contactId = data.contactId || null;
+        // Regrava o tipo do contato junto: sem contactId ele vira nulo; com
+        // contactId e sem contactType explícito, infere pelo tipo da conta.
+        update.contactType = data.contactType ||
+            (data.contactId ? (previous.type === "pay" ? "suppliers" : "customers") : null);
+    }
     if (data.contactType !== undefined) update.contactType = data.contactType || null;
 
     const bill = await updateBillRepo(id, update, tenantId);

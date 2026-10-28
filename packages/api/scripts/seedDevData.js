@@ -159,8 +159,9 @@ for (const b of billsSeed) {
         status: b.paid ? "paid" : "pending",
         paidAt: b.paid ? daysAgo(2) : null,
         tenantId: tenant._id,
-        supplierId: suppliers[b.supplier]?._id || null,
-        customerId: customers[b.customer]?._id || null,
+        // Vínculo segue o schema atual: contactId + contactType (refPath).
+        contactId: suppliers[b.supplier]?._id || customers[b.customer]?._id || null,
+        contactType: b.supplier != null ? "suppliers" : b.customer != null ? "customers" : null,
         createdBy: admin._id,
         deletedAt: null,
         createdAt: daysAgo(Math.abs(b.daysAgo) + 5),

@@ -55,7 +55,7 @@ describe('billService', () => {
                 type: 'pay',
                 description: 'Aluguel',
                 amount: 100,
-                dueDate: '2026-09-10',
+                dueDate: '2099-09-10',
             }, 'tenantA', 'u1');
 
             expect(result.type).toBe('pay');
@@ -68,7 +68,7 @@ describe('billService', () => {
                 type: 'invalid',
                 description: 'Teste',
                 amount: 100,
-                dueDate: '2026-09-10',
+                dueDate: '2099-09-10',
             }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 400 });
         });
 
@@ -77,7 +77,7 @@ describe('billService', () => {
                 type: 'pay',
                 description: 'Teste',
                 amount: 0,
-                dueDate: '2026-09-10',
+                dueDate: '2099-09-10',
             }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 400 });
         });
 
@@ -87,6 +87,15 @@ describe('billService', () => {
                 description: 'Teste',
                 amount: 100,
                 dueDate: 'não é data',
+            }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 400 });
+        });
+
+        it('rejects a due date in the past', async () => {
+            await expect(createBillService({
+                type: 'pay',
+                description: 'Teste',
+                amount: 100,
+                dueDate: '2020-01-10',
             }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 400 });
         });
     });
@@ -327,9 +336,9 @@ describe('billService', () => {
     describe('updateBillService', () => {
         it('updates amount and due date', async () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
-            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', amount: 200, dueDate: new Date('2026-09-15') });
+            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', amount: 200, dueDate: new Date('2099-09-15') });
 
-            const result = await updateBillService('b1', { amount: 200, dueDate: '2026-09-15' }, 'tenantA', 'u1');
+            const result = await updateBillService('b1', { amount: 200, dueDate: '2099-09-15' }, 'tenantA', 'u1');
 
             expect(result.amount).toBe(200);
             expect(mockUpdateBillRepo).toHaveBeenCalled();
@@ -345,6 +354,12 @@ describe('billService', () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
 
             await expect(updateBillService('b1', { amount: 200 }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('rejects moving the due date to the past', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+
+            await expect(updateBillService('b1', { dueDate: '2020-01-10' }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 400 });
         });
     });
 });
