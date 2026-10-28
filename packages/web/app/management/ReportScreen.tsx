@@ -1,9 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useWorkspaceApi } from '../AdminShell';
-import Icon from '../Icon';
 import { display, type Row } from './config';
 import { DataTable, errorMessage, Notice, PageHeading } from './ui';
 
@@ -88,28 +86,9 @@ const summaryLabels: Record<string, string> = {
   balance: 'Saldo',
 };
 
-// Destino do botão de cada card do fluxo de caixa: leva à tela que detalha
-// aquele tipo de movimentação.
-const cardLinks: Record<string, string> = {
-  sales: '/management/orders',
-  cashSales: '/management/orders',
-  billsReceive: '/management/receivables',
-  billsPay: '/management/payables',
-  suprimentos: '/management/cashiers',
-  sangrias: '/management/cashiers',
-  estornos: '/management/orders',
-  inflow: '/management/cashiers',
-  outflow: '/management/cashiers',
-  balance: '/management/cashiers',
-};
-
-export default function ReportScreen({
-  cashFlow = false,
-}: {
-  cashFlow?: boolean;
-}) {
+export default function ReportScreen() {
   const { client, tenantId } = useWorkspaceApi();
-  const [kind, setKind] = useState(cashFlow ? 'cash-flow' : 'sales');
+  const [kind, setKind] = useState('sales');
   const [start, setStart] = useState(() =>
     new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
   );
@@ -164,12 +143,8 @@ export default function ReportScreen({
   return (
     <main className="mx-auto max-w-screen-2xl space-y-5 p-4 sm:p-8">
       <PageHeading
-        title={cashFlow ? 'Fluxo de caixa' : 'Relatórios'}
-        description={
-          cashFlow
-            ? 'Entradas, saídas e saldo realizado no período. Inclui vendas, contas liquidadas e movimentações de caixa.'
-            : 'Analise vendas, produtos, estoque e financeiro com os dados da empresa.'
-        }
+        title="Relatórios"
+        description="Analise vendas, produtos, estoque e financeiro com os dados da empresa."
       />
       <Notice error={error} />
       {!tenantId ? (
@@ -194,9 +169,8 @@ export default function ReportScreen({
               });
             }}
           >
-            {!cashFlow && (
-              <label className="admin-label">
-                Relatório
+            <label className="admin-label">
+              Relatório
                 <select
                   className="admin-input mt-1"
                   value={kind}
@@ -212,7 +186,6 @@ export default function ReportScreen({
                   ))}
                 </select>
               </label>
-            )}
             {kind !== 'inventory' && (
               <>
                 <label className="admin-label">
@@ -285,32 +258,24 @@ export default function ReportScreen({
               {loading ? 'Carregando...' : 'Gerar relatório'}
             </button>
           </form>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Object.entries(summary)
-              .filter(([key]) => key !== '_id')
-              .map(([key, value]) => (
-                <div key={key} className="admin-panel">
-                  <div className="flex items-start justify-between gap-2">
+          {/* No fluxo de caixa os cards de resumo são redundantes: a
+              tabela já traz os mesmos valores linha a linha. */}
+          {kind !== 'cash-flow' && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {Object.entries(summary)
+                .filter(([key]) => key !== '_id')
+                .map(([key, value]) => (
+                  <div key={key} className="admin-panel">
                     <p className="text-sm text-slate-500">
                       {summaryLabels[key] || key}
                     </p>
-                    {cashFlow && cardLinks[key] && (
-                      <Link
-                        href={cardLinks[key]}
-                        aria-label={`Ir para ${summaryLabels[key] || key}`}
-                        title="Ver detalhes"
-                        className="text-slate-400 transition hover:text-blue-600"
-                      >
-                        <Icon name="external" className="h-4 w-4" />
-                      </Link>
-                    )}
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
+                      {display(value, key)}
+                    </p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold text-slate-900">
-                    {display(value, key)}
-                  </p>
-                </div>
-              ))}
-          </div>
+                ))}
+            </div>
+          )}
           {loading ? (
             <p role="status">Carregando relatório...</p>
           ) : (

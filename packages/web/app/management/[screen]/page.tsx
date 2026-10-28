@@ -13,8 +13,7 @@ export default async function ManagementPage({
 }) {
   const { screen } = await params;
   if (screen === 'pos') return <PosScreen />;
-  if (screen === 'reports' || screen === 'cash-flow')
-    return <ReportScreen cashFlow={screen === 'cash-flow'} />;
+  if (screen === 'reports') return <ReportScreen />;
   if (screen === 'company') return <CompanyScreen />;
   if (screen === 'account') return <AccountScreen />;
   if (screen === 'exports') return <ExportScreen />;

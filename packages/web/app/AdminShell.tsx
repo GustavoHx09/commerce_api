@@ -30,7 +30,6 @@ export const navigation = [
     items: [
       ['/management/payables', 'Contas a pagar', 'CP'],
       ['/management/receivables', 'Contas a receber', 'CR'],
-      ['/management/cash-flow', 'Fluxo de caixa', 'FC'],
     ],
   },
   {
