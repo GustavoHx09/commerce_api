@@ -20,6 +20,11 @@ const cashierSchema = new mongoose.Schema({
         ref: "users",
     },
 
+    // Número sequencial do caixa por tenant (1, 2, 3...), como o orderNumber das vendas.
+    cashierNumber: {
+        type: Number,
+    },
+
     openedAt: {
         type: Date,
         default: Date.now,
@@ -62,6 +67,12 @@ const cashierSchema = new mongoose.Schema({
 cashierSchema.index(
     { tenantId: 1, openedBy: 1, status: 1 },
     { unique: true, partialFilterExpression: { status: "open", deletedAt: null } }
+);
+
+// Número sequencial único por tenant (parcial: só vale quando preenchido).
+cashierSchema.index(
+    { tenantId: 1, cashierNumber: 1 },
+    { unique: true, partialFilterExpression: { cashierNumber: { $type: "number" } } }
 );
 
 export default mongoose.model("cashiers", cashierSchema);

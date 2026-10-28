@@ -17,7 +17,7 @@ import {
 } from "./cashierRepo.js";
 import { countOrdersByCashierRepo } from "../order/orderRepo.js";
 import { getCashierPaymentTotalsRepo } from "../payment/paymentRepo.js";
-import { getTenantByIdRepo } from "../tenant/tenantRepo.js";
+import { getTenantByIdRepo, incrementCashierCounterRepo } from "../tenant/tenantRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { validateRequired, throwValidationError } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
@@ -88,10 +88,16 @@ export const createCashierService = async (data, tenantId, actorId) => {
         }
     }
 
+    // Incrementa o contador do tenant de forma atômica, gerando a numeração
+    // sequencial do caixa (1, 2, 3...) por empresa — mesmo padrão das vendas.
+    const counted = await incrementCashierCounterRepo(tenantId);
+    const cashierNumber = counted ? counted.cashierCounter : null;
+
     const cashier = await createCashierRepo({
         tenantId,
         openedBy: actorId,
         initialAmount,
+        cashierNumber,
         status: "open",
     });
 

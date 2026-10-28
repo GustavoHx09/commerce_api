@@ -50,3 +50,12 @@ export const incrementOrderCounterRepo = (id, { session } = {}) =>
         { $inc: { orderCounter: 1 } },
         { new: true, session }
     );
+
+// Incrementa o contador sequencial de caixas do tenant de forma atômica e
+// retorna o tenant atualizado (o número do caixa sai de cashierCounter).
+export const incrementCashierCounterRepo = (id, { session } = {}) =>
+    tenants.findOneAndUpdate(
+        { _id: id, deletedAt: null },
+        { $inc: { cashierCounter: 1 } },
+        { new: true, session }
+    );

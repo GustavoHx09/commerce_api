@@ -8,6 +8,7 @@ const mockGetCashierByIdRepo = vi.fn();
 const mockGetOpenCashierByUserRepo = vi.fn();
 const mockGetOpenCashierByTenantRepo = vi.fn();
 const mockGetTenantByIdRepo = vi.fn();
+const mockIncrementCashierCounterRepo = vi.fn();
 const mockGetLastClosedCashierRepo = vi.fn();
 const mockUpdateCashierRepo = vi.fn();
 const mockSoftDeleteCashierRepo = vi.fn();
@@ -45,6 +46,7 @@ vi.mock('../../order/orderRepo.js', () => ({
 
 vi.mock('../../tenant/tenantRepo.js', () => ({
     getTenantByIdRepo: (...args) => mockGetTenantByIdRepo(...args),
+    incrementCashierCounterRepo: (...args) => mockIncrementCashierCounterRepo(...args),
 }));
 
 vi.mock('../../audit/auditHelpers.js', () => ({
@@ -57,6 +59,7 @@ describe('cashierService', () => {
         vi.clearAllMocks();
         mockGetCashierBalancesRepo.mockResolvedValue([]);
         mockGetTenantByIdRepo.mockResolvedValue({ _id: 'tenantA', cashierMode: 'per_operator' });
+        mockIncrementCashierCounterRepo.mockResolvedValue({ _id: 'tenantA', cashierCounter: 1 });
         mockGetOpenCashierByTenantRepo.mockResolvedValue(null);
     });
 

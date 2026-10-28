@@ -104,6 +104,12 @@ const tenantsSchema = new mongoose.Schema({
         default: 0,
     },
 
+    // Contador sequencial de caixas do tenant (incrementado a cada abertura).
+    cashierCounter: {
+        type: Number,
+        default: 0,
+    },
+
     // Taxas de recebimento configuradas pelo admin do tenant (maquininha, pix e juros por parcela).
     // Os juros do crédito são repassados ao cliente e somados ao total cobrado.
     paymentFees: {
