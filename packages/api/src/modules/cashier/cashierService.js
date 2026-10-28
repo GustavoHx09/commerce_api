@@ -116,6 +116,20 @@ export const getCashiersService = async (query, tenantId, includeDeleted = false
         filter.status = query.status;
     }
 
+    // Busca textual: número sequencial do caixa (#4 → 4).
+    if (query.search) {
+        const number = Number(String(query.search).replace(/^#/, ''));
+        if (!isNaN(number)) filter.cashierNumber = number;
+    }
+
+    // Intervalo de datas sobre a abertura do caixa (histórico de fechamentos).
+    if (query.startDate && query.endDate) {
+        filter.openedAt = {
+            $gte: new Date(`${query.startDate}T00:00:00.000Z`),
+            $lte: new Date(`${query.endDate}T23:59:59.999Z`),
+        };
+    }
+
     const [data, total] = await Promise.all([
         getCashiersRepo(filter, skip, limit, sort),
         countCashiersRepo(filter),
