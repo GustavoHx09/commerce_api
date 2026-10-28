@@ -9,7 +9,8 @@ export const createBillRepo = async (data, { session } = {}) => {
 export const getBillsRepo = (filter, skip, limit, sort) =>
     bills.find(filter).skip(skip).limit(limit).sort(sort)
         .populate("createdBy", "name")
-        .populate("contactId", "name document");
+        .populate("contactId", "name document")
+        .populate("cashierId", "cashierNumber openedAt");
 
 export const countBillsRepo = (filter) => bills.countDocuments(filter);
 
@@ -17,7 +18,8 @@ export const getBillByIdRepo = (id, tenantId, includeDeleted = false, { session 
     bills.findOne({ _id: id, ...baseQuery(tenantId, includeDeleted) })
         .session(session)
         .populate("createdBy", "name")
-        .populate("contactId", "name document");
+        .populate("contactId", "name document")
+        .populate("cashierId", "cashierNumber openedAt");
 
 export const updateBillRepo = (id, data, tenantId, { session } = {}) =>
     bills.findOneAndUpdate({ _id: id, ...baseQuery(tenantId, false) }, data, { new: true, session })

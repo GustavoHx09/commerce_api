@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createBillService, getBillsService, payBillService, cancelBillService, updateBillService } from '../billService.js';
+import { createBillService, getBillsService, payBillService, reverseBillService, cancelBillService, updateBillService, softDeleteBillService } from '../billService.js';
 
 const mockCreateBillRepo = vi.fn();
 const mockGetBillsRepo = vi.fn();
@@ -167,6 +167,114 @@ describe('billService', () => {
         });
     });
 
+    describe('reverseBillService', () => {
+        it('reverses a paid bill settled via cashier, returning the amount', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({
+                _id: 'b1',
+                type: 'pay',
+                status: 'paid',
+                description: 'Fornecedor',
+                paidAt: new Date(),
+                cashierId: 'c1',
+                cashierAmount: 70,
+                externalAmount: 30,
+                externalMethod: 'pix',
+            });
+            mockGetCashierByIdRepo.mockResolvedValue({ _id: 'c1', status: 'open' });
+            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+
+            const result = await reverseBillService('b1', 'tenantA', 'u1', 'user');
+
+            expect(result.status).toBe('pending');
+            expect(mockCreateSystemCashierMovement).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'recebimento_conta', amount: 70, billId: 'b1' }),
+                'u1',
+                { session: {} }
+            );
+            expect(mockUpdateBillRepo).toHaveBeenCalledWith(
+                'b1',
+                expect.objectContaining({
+                    status: 'pending',
+                    paidAt: null,
+                    cashierId: null,
+                    cashierAmount: 0,
+                    externalAmount: 0,
+                    externalMethod: null,
+                }),
+                'tenantA',
+                { session: {} }
+            );
+        });
+
+        it('reverses an externally settled bill without touching the cashier', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({
+                _id: 'b1',
+                type: 'receive',
+                status: 'paid',
+                paidAt: new Date(),
+                cashierId: null,
+                cashierAmount: 0,
+                externalAmount: 100,
+            });
+            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+
+            const result = await reverseBillService('b1', 'tenantA', 'u1', 'user');
+
+            expect(result.status).toBe('pending');
+            expect(mockCreateSystemCashierMovement).not.toHaveBeenCalled();
+        });
+
+        it('rejects reversal when the origin cashier is already closed', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({
+                _id: 'b1',
+                type: 'pay',
+                status: 'paid',
+                paidAt: new Date(),
+                cashierId: 'c1',
+                cashierAmount: 70,
+            });
+            mockGetCashierByIdRepo.mockResolvedValue({ _id: 'c1', status: 'closed' });
+
+            await expect(reverseBillService('b1', 'tenantA', 'u1', 'admin')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('rejects reversing a non-paid bill', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+
+            await expect(reverseBillService('b1', 'tenantA', 'u1', 'admin')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('rejects reversal by a regular user after the 30-minute window', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({
+                _id: 'b1',
+                type: 'pay',
+                status: 'paid',
+                paidAt: new Date(Date.now() - 60 * 60 * 1000),
+                cashierId: 'c1',
+                cashierAmount: 70,
+            });
+
+            await expect(reverseBillService('b1', 'tenantA', 'u1', 'user')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('allows admin to reverse after the 30-minute window', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({
+                _id: 'b1',
+                type: 'pay',
+                status: 'paid',
+                paidAt: new Date(Date.now() - 60 * 60 * 1000),
+                cashierId: 'c1',
+                cashierAmount: 70,
+            });
+            mockGetCashierByIdRepo.mockResolvedValue({ _id: 'c1', status: 'open' });
+            mockUpdateBillRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+
+            const result = await reverseBillService('b1', 'tenantA', 'u1', 'admin');
+
+            expect(result.status).toBe('pending');
+        });
+    });
+
     describe('cancelBillService', () => {
         it('cancels a pending bill', async () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
@@ -181,6 +289,38 @@ describe('billService', () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'cancelled' });
 
             await expect(cancelBillService('b1', 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('rejects cancelling a paid bill — reversal is required first', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
+
+            await expect(cancelBillService('b1', 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+        });
+    });
+
+    describe('softDeleteBillService', () => {
+        it('soft deletes a pending bill', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'pending' });
+            mockSoftDeleteBillRepo.mockResolvedValue({ _id: 'b1', deletedAt: new Date() });
+
+            const result = await softDeleteBillService('b1', 'tenantA', 'u1');
+
+            expect(result.deletedAt).toBeTruthy();
+            expect(mockAuditAction).toHaveBeenCalledWith('bill', 'delete', expect.anything(), expect.anything(), 'u1');
+        });
+
+        it('rejects deleting a paid bill', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
+
+            await expect(softDeleteBillService('b1', 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+            expect(mockSoftDeleteBillRepo).not.toHaveBeenCalled();
+        });
+
+        it('rejects deleting a cancelled bill', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'cancelled' });
+
+            await expect(softDeleteBillService('b1', 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+            expect(mockSoftDeleteBillRepo).not.toHaveBeenCalled();
         });
     });
 
@@ -197,6 +337,12 @@ describe('billService', () => {
 
         it('rejects updating a cancelled bill', async () => {
             mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'cancelled' });
+
+            await expect(updateBillService('b1', { amount: 200 }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
+        });
+
+        it('rejects updating a paid bill', async () => {
+            mockGetBillByIdRepo.mockResolvedValue({ _id: 'b1', status: 'paid' });
 
             await expect(updateBillService('b1', { amount: 200 }, 'tenantA', 'u1')).rejects.toMatchObject({ statusCode: 409 });
         });

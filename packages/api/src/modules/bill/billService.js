@@ -103,8 +103,8 @@ export const updateBillService = async (id, data, tenantId, actorId) => {
         throwValidationError("Conta nao encontrada", 404);
     }
 
-    if (previous.status === "cancelled") {
-        throwValidationError("Nao e possivel alterar uma conta cancelada", 409);
+    if (previous.status !== "pending") {
+        throwValidationError("Apenas contas pendentes podem ser alteradas", 409);
     }
 
     const update = {};
@@ -225,7 +225,76 @@ export const payBillService = async (id, data = {}, tenantId, actorId) => {
     });
 };
 
-// Cancela uma conta sem apagar o historico.
+// Estorna a liquidação de uma conta: devolve o valor ao caixa de origem
+// (quando a baixa movimentou caixa) e volta a conta para pendente, limpando
+// os dados da liquidação. Só permitido com o caixa de origem ainda aberto —
+// caixa fechado é histórico consolidado e não deve ser alterado.
+export const reverseBillService = async (id, tenantId, actorId, actorRole) => {
+    return withTransaction(async (session) => {
+        const previous = await getBillByIdRepo(id, tenantId, false);
+
+        if (!previous) {
+            throwValidationError("Conta nao encontrada", 404);
+        }
+
+        if (previous.status !== "paid") {
+            throwValidationError("Apenas contas liquidadas podem ser estornadas", 409);
+        }
+
+        // Regra de prazo igual ao cancelamento de venda: funcionários só
+        // estornam até 30 minutos após a baixa; admin/master sem limite.
+        const isPrivileged = ["admin", "master"].includes(actorRole);
+        const REVERSE_WINDOW_MS = 30 * 60 * 1000;
+        if (!isPrivileged && Date.now() - new Date(previous.paidAt).getTime() > REVERSE_WINDOW_MS) {
+            throwValidationError("O prazo de 30 minutos para estornar esta conta expirou — solicite a um administrador", 409);
+        }
+
+        const cashierAmount = Number(previous.cashierAmount || 0);
+        if (previous.cashierId && cashierAmount > 0) {
+            const cashier = await getCashierByIdRepo(previous.cashierId, tenantId, false, { session });
+
+            if (!cashier) {
+                throwValidationError("Caixa de origem nao encontrado", 404);
+            }
+            if (cashier.status !== "open") {
+                throwValidationError("O caixa de origem ja esta fechado; nao e possivel estornar", 409);
+            }
+
+            // O estorno usa o tipo oposto da baixa: conta paga devolve dinheiro
+            // ao caixa (recebimento) e conta recebida retira (pagamento),
+            // mantendo o cálculo de saldo correto sem tipos novos.
+            await createSystemCashierMovement({
+                cashierId: cashier._id,
+                tenantId,
+                type: previous.type === "pay" ? "recebimento_conta" : "pagamento_conta",
+                amount: cashierAmount,
+                reason: `Estorno da conta: ${previous.description}`,
+                billId: previous._id,
+            }, actorId, { session });
+        }
+
+        const bill = await updateBillRepo(
+            id,
+            {
+                status: "pending",
+                paidAt: null,
+                cashierId: null,
+                cashierAmount: 0,
+                externalAmount: 0,
+                externalMethod: null,
+            },
+            tenantId,
+            { session }
+        );
+
+        await auditAction("bill", "update", previous, bill, actorId, { session });
+
+        return bill;
+    });
+};
+
+// Cancela uma conta sem apagar o historico. Apenas contas pendentes podem
+// ser canceladas — conta liquidada exige estorno antes.
 export const cancelBillService = async (id, tenantId, actorId) => {
     const previous = await getBillByIdRepo(id, tenantId, false);
 
@@ -233,8 +302,8 @@ export const cancelBillService = async (id, tenantId, actorId) => {
         throwValidationError("Conta nao encontrada", 404);
     }
 
-    if (previous.status === "cancelled") {
-        throwValidationError("Conta ja esta cancelada", 409);
+    if (previous.status !== "pending") {
+        throwValidationError("Apenas contas pendentes podem ser canceladas", 409);
     }
 
     const bill = await updateBillRepo(
@@ -248,12 +317,17 @@ export const cancelBillService = async (id, tenantId, actorId) => {
     return bill;
 };
 
-// Realiza soft delete de uma conta.
+// Realiza soft delete de uma conta. Apenas contas pendentes podem ser
+// removidas — conta liquidada é escrituração financeira e fica preservada.
 export const softDeleteBillService = async (id, tenantId, actorId) => {
     const previous = await getBillByIdRepo(id, tenantId, false);
 
     if (!previous) {
         throwValidationError("Conta nao encontrada", 404);
+    }
+
+    if (previous.status !== "pending") {
+        throwValidationError("Apenas contas pendentes podem ser removidas", 409);
     }
 
     const bill = await softDeleteBillRepo(id, tenantId);

@@ -4,6 +4,7 @@ import {
     getBillByIdService,
     updateBillService,
     payBillService,
+    reverseBillService,
     cancelBillService,
     softDeleteBillService,
     restoreBillService,
@@ -37,6 +38,11 @@ export const updateBill = async (req, res) => {
 export const payBill = async (req, res) => {
     const bill = await payBillService(req.params.id, req.body, req.tenantId, req.user.id);
     return successResponse(res, { bill }, "Conta paga/recebida com sucesso");
+};
+
+export const reverseBill = async (req, res) => {
+    const bill = await reverseBillService(req.params.id, req.tenantId, req.user.id, req.user.role);
+    return successResponse(res, { bill }, "Conta estornada com sucesso");
 };
 
 export const cancelBill = async (req, res) => {

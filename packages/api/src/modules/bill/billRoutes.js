@@ -5,6 +5,7 @@ import {
     getBillById,
     updateBill,
     payBill,
+    reverseBill,
     cancelBill,
     softDeleteBill,
     restoreBill,
@@ -21,6 +22,7 @@ router.post("/", authMiddleware, tenantMiddleware, authorize("bills", "write"), 
 router.get("/:id", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "read"), asyncHandler(getBillById));
 router.put("/:id", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "write"), asyncHandler(updateBill));
 router.put("/:id/pay", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "write"), asyncHandler(payBill));
+router.put("/:id/reverse", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "write"), asyncHandler(reverseBill));
 router.put("/:id/cancel", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "write"), asyncHandler(cancelBill));
 router.put("/:id/restore", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "write"), asyncHandler(restoreBill));
 router.delete("/:id", authMiddleware, tenantMiddleware, validateObjectId(), authorize("bills", "delete"), asyncHandler(softDeleteBill));
