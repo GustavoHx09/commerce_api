@@ -12,6 +12,9 @@ export type Field = {
   disabled?: boolean;
   // Campo somente leitura nos detalhes (não entra no formulário de cadastro).
   readOnly?: boolean;
+  // Campo que só aparece na edição, nunca no cadastro (ex.: situação —
+  // não faz sentido criar um registro já inativo).
+  editOnly?: boolean;
   // Valor controlado por outro campo: existe no payload mas não vira input.
   hidden?: boolean;
   hint?: string;
@@ -43,6 +46,8 @@ export const addressFields: Field[] = [
 const active: Field = {
   key: 'isActive',
   label: 'Situação',
+  // Só na edição: criar um registro já inativo não faz sentido.
+  editOnly: true,
   options: [
     ['true', 'Ativo'],
     ['false', 'Inativo'],
@@ -116,12 +121,12 @@ const billFilters: Field[] = [
     label: 'Situação',
     options: [
       ['pending', 'Pendente'],
-      ['paid', 'Liquidada'],
+      ['paid', 'Finalizada'],
       ['cancelled', 'Cancelada'],
     ],
   },
-  { key: 'startDueDate', label: 'Vencimento inicial', type: 'date' },
-  { key: 'endDueDate', label: 'Vencimento final', type: 'date' },
+  { key: 'startDueDate', label: 'Data inicial', type: 'date' },
+  { key: 'endDueDate', label: 'Data final', type: 'date' },
 ];
 
 export const screens: Record<string, Screen> = {
@@ -224,7 +229,6 @@ export const screens: Record<string, Screen> = {
     filters: [activeViewFilter],
     fields: [
       ...contactFields,
-      { key: 'contactName', label: 'Nome do contato' },
       { key: 'observations', label: 'Observações', maxLength: 500 },
     ],
   },
@@ -330,7 +334,12 @@ export const screens: Record<string, Screen> = {
     detailKey: 'bill',
     params: { type: 'pay' },
     columns: billColumns,
-    fields: billFields,
+    // Conta a pagar pode vincular um fornecedor (opcional).
+    fields: [
+      billFields[0],
+      { key: 'contactId', label: 'Fornecedor', source: '/suppliers' },
+      ...billFields.slice(1),
+    ],
     filters: billFilters,
     actions: [
       ['pay', 'Registrar pagamento'],
@@ -344,7 +353,12 @@ export const screens: Record<string, Screen> = {
     detailKey: 'bill',
     params: { type: 'receive' },
     columns: billColumns,
-    fields: billFields,
+    // Conta a receber pode vincular um cliente (opcional).
+    fields: [
+      billFields[0],
+      { key: 'contactId', label: 'Cliente', source: '/customers' },
+      ...billFields.slice(1),
+    ],
     filters: billFilters,
     actions: [
       ['pay', 'Registrar recebimento'],
@@ -507,8 +521,12 @@ export function display(value: unknown, key = ''): string {
       row.name ||
         row.displayName ||
         row.description ||
-        // Caixas populados exibem o número sequencial (#3), não o _id.
+        // Caixas populados exibem o número sequencial (#3); caixas antigos
+        // sem número mostram a data de abertura em vez do _id.
         (row.cashierNumber != null ? `#${row.cashierNumber}` : null) ||
+        (row.openedAt
+          ? `Caixa de ${new Date(String(row.openedAt)).toLocaleDateString('pt-BR')}`
+          : null) ||
         row._id ||
         '—'
     );

@@ -145,8 +145,15 @@ const hiddenFields = new Set([
   '__v',
   'deletedAt',
   'permissionPresetId',
-  // Campo legado presente em contas criadas pelo seed antigo — fora do schema.
+  // Campos legados presentes em contas criadas pelo seed antigo — fora do
+  // schema atual (o vínculo correto é contactId/contactType).
   'supplierId',
+  'customerId',
+  // Metadado do populate do contato (coleção de origem) — não é informação
+  // de negócio para o usuário.
+  'contactType',
+  // Campo removido do cadastro de fornecedores — dados antigos não viram card.
+  'contactName',
   'permissions',
   'revokedPermissions',
   'snapshot',
@@ -431,16 +438,20 @@ function EditableDetails({
       !hiddenFields.has(key) &&
       !covered.has(key) &&
       !Array.isArray(value) &&
-      // "Criado em" é redundante com "Última atualização"; descrição foi
-      // removida do formulário de produtos e não aparece nos detalhes.
-      key !== 'createdAt' &&
+      // "Criado em" é redundante com "Última atualização" nas outras telas;
+      // em contas ele compõe o par de datas do fim (ver pairTail).
+      // Descrição foi removida do formulário de produtos e não aparece nos
+      // detalhes.
+      (endpoint === '/bills' || key !== 'createdAt') &&
       key !== 'description' &&
-      // Em contas, "Tipo" (a pagar/a receber) já é a própria tela e "Ativo"
-      // não agrega — soft delete nunca chega visível aqui. Dados da
-      // liquidação (caixa, valores, meio externo) só aparecem depois de paga.
+      // Em contas, "Tipo" (a pagar/a receber) já é a própria tela, "Ativo"
+      // não agrega e "Última atualização" é redundante com "Liquidada em".
+      // Dados da liquidação (caixa, valores, meio externo) só aparecem
+      // depois de paga.
       !(endpoint === '/bills' &&
         (key === 'type' ||
           key === 'isActive' ||
+          key === 'updatedAt' ||
           (row.status !== 'paid' &&
             [
               'cashierId',
@@ -450,10 +461,12 @@ function EditableDetails({
             ].includes(key))))
   );
 
-  // Em contas, "Liquidada em" e "Última atualização" rendem juntos e a
-  // "Situação" fecha a grade — sempre lado a lado e nessa ordem.
+  // Em contas, "Criado em" e "Liquidada em" rendem juntos; a "Situação"
+  // fecha a grade ao lado da "Forma externa" quando ela existir.
   const pairTail =
-    endpoint === '/bills' ? ['paidAt', 'updatedAt', 'status'] : [];
+    endpoint === '/bills'
+      ? ['createdAt', 'paidAt', 'status', 'externalMethod']
+      : [];
   const readOnlyTail = pairTail
     .map((key) => readOnly.find(([k]) => k === key))
     .filter((entry): entry is [string, unknown] => Boolean(entry));
@@ -468,7 +481,6 @@ function EditableDetails({
       'cashierId',
       'cashierAmount',
       'externalAmount',
-      'externalMethod',
     ];
     readOnlyMain.sort(
       ([a], [b]) =>
@@ -613,7 +625,8 @@ function EditableDetails({
             <div key={key} className={detailBoxClass}>
               <dt className={detailLabelClass}>{detailLabels[key] || key}</dt>
               <dd className={`break-words ${detailValueClass}`}>
-                {display(value, key)}
+                {/* Datas do par final exibem só a data (sufixo @date). */}
+                {display(value, /At$/.test(key) ? `${key}@date` : key)}
               </dd>
             </div>
           ))}
@@ -742,9 +755,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
   const [openCashierMovements, setOpenCashierMovements] = useState<Row[]>([]);
   const [showCashierHistory, setShowCashierHistory] = useState(false);
   const isCashiers = screen.endpoint === '/cashiers';
-  const isProducts = screen.endpoint === '/products';
-  // Produtos não carregam na abertura da tela: a listagem só acontece
-  // sob demanda, quando o operador clica em Buscar — a menos que já
+  // Nenhuma tela carrega a listagem na abertura: a busca só acontece
+  // sob demanda, quando o usuário clica em Buscar — a menos que já
   // exista um filtro vindo da URL (ex.: alerta de estoque no dashboard).
   const initialFilters = Object.fromEntries(
     [
@@ -759,9 +771,21 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
       .map((key) => [key, searchParams.get(key) || ''] as const)
       .filter(([, value]) => value)
   );
-  const [productsSearched, setProductsSearched] = useState(
+  // A listagem só dispara sozinha quando vem filtro pela URL.
+  const [searched, setSearched] = useState(
     Object.keys(initialFilters).length > 0
   );
+  // Em contas, o filtro de datas já vem sugerido com os últimos 30 dias
+  // (hoje até 30 dias atrás) — facilita listar as contas do último mês.
+  // Fica só nos campos visíveis: não dispara busca automática.
+  if (screen.endpoint === '/bills' && !initialFilters.startDueDate) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    const iso = (date: Date) => date.toISOString().slice(0, 10);
+    initialFilters.startDueDate = iso(start);
+    initialFilters.endDueDate = iso(end);
+  }
   // Resumo monetário reutiliza o formatador de exibição genérico.
   const currency = (value: unknown) => display(value, 'balance');
   const [page, setPage] = useState(1);
@@ -795,35 +819,11 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
     }
     setLoading(true);
     setError('');
-    // Produtos começam com a lista vazia até a primeira busca sob demanda.
-    if (isProducts && !productsSearched) {
-      setRows([]);
-      setTotal(0);
-      setTotalPages(0);
-      setLoading(false);
-      return;
-    }
-    try {
-      const response = await client.get(screen.endpoint, {
-        params: {
-          ...screen.params,
-          ...applied,
-          // Na tela de caixas a lista mostra apenas fechamentos — o caixa aberto
-          // fica no resumo "Caixa do dia".
-          ...(isCashiers ? { status: 'closed' } : {}),
-          page,
-          limit: 15,
-        },
-      });
-      setRows(response.data.data.data);
-      setTotalPages(response.data.data.pagination.totalPages);
-      setTotal(response.data.data.pagination.total);
 
-      // Resumo do caixa aberto: busca independente dos filtros da lista, assim
-      // o "Caixa do dia" continua visível mesmo ao filtrar caixas fechados.
-      // No modo compartilhado vale o caixa da empresa; no modo por operador,
-      // apenas o caixa aberto pelo usuário logado.
-      if (isCashiers) {
+    // Resumo do caixa aberto: carrega sempre, pois é informação operacional
+    // independente da listagem (que fica sob demanda como as demais telas).
+    if (isCashiers) {
+      try {
         const [openRes, companyRes] = await Promise.all([
           client.get('/cashiers', { params: { status: 'open', limit: 50 } }),
           client.get('/tenants/me'),
@@ -855,14 +855,41 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
         } else {
           setOpenCashierMovements([]);
         }
+      } catch (cause) {
+        setError(errorMessage(cause));
       }
+    }
+
+    // Todas as telas começam com a lista vazia até a primeira busca sob demanda.
+    if (!searched) {
+      setRows([]);
+      setTotal(0);
+      setTotalPages(0);
+      setLoading(false);
+      return;
+    }
+    try {
+      const response = await client.get(screen.endpoint, {
+        params: {
+          ...screen.params,
+          ...applied,
+          // Na tela de caixas a lista mostra apenas fechamentos — o caixa aberto
+          // fica no resumo "Caixa do dia".
+          ...(isCashiers ? { status: 'closed' } : {}),
+          page,
+          limit: 15,
+        },
+      });
+      setRows(response.data.data.data);
+      setTotalPages(response.data.data.pagination.totalPages);
+      setTotal(response.data.data.pagination.total);
     } catch (cause) {
       setRows([]);
       setError(errorMessage(cause));
     } finally {
       setLoading(false);
     }
-  }, [client, tenantId, screen, applied, page, isProducts, productsSearched, isCashiers, user?.id]);
+  }, [client, tenantId, screen, applied, page, searched, isCashiers, user?.id]);
   useEffect(() => {
     startTransition(() => {
       void load();
@@ -1130,8 +1157,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                     return;
                   }
                   setPage(1);
-                  // Buscar libera a primeira listagem de produtos.
-                  if (isProducts) setProductsSearched(true);
+                  // Buscar libera a primeira listagem da tela.
+                  setSearched(true);
                   setApplied(filters);
                 }}
               >
@@ -1199,8 +1226,11 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                   type="button"
                   className="admin-secondary"
                   onClick={() => {
+                    // Limpar volta a tela ao estado inicial: lista fechada,
+                    // sem disparar nenhuma busca.
                     setFilters({});
                     setApplied({});
+                    setSearched(false);
                     setPage(1);
                   }}
                 >
@@ -1208,8 +1238,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                 </button>
               </form>
             )}
-            {/* A contagem e a lista de produtos só aparecem após uma busca. */}
-            {(!isProducts || productsSearched) && (
+            {/* A contagem e a lista só aparecem após uma busca. */}
+            {searched && (
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>{total} registro(s)</span>
                 <button
@@ -1226,6 +1256,9 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-semibold text-slate-900">
                     Caixa do dia
+                    {/* Número sequencial do caixa aberto (#6), quando existir. */}
+                    {openCashier?.cashierNumber != null &&
+                      ` · #${openCashier.cashierNumber}`}
                   </h3>
                   <div className="flex gap-2">
                     {openCashier && (
@@ -1334,8 +1367,11 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
             )}
             {(isCashiers &&
               !showCashierHistory &&
-              !(filters.search || applied.search || '').trim()) ||
-            (isProducts && !productsSearched) ? null : loading ? (
+              !(filters.search || applied.search || '').trim()) ? null : !searched ? (
+              <div className="admin-panel py-12 text-center text-sm text-slate-500">
+                Use os filtros acima e clique em Buscar para listar os registros.
+              </div>
+            ) : loading ? (
               <div role="status" className="admin-panel py-12 text-center">
                 Carregando registros...
               </div>
@@ -1391,9 +1427,10 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               />
             )}
             {!(
-              isCashiers &&
-              !showCashierHistory &&
-              !(filters.search || applied.search || '').trim()
+              (isCashiers &&
+                !showCashierHistory &&
+                !(filters.search || applied.search || '').trim()) ||
+              !searched
             ) && (
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1868,7 +1905,9 @@ function PayBillModal({
 
   const insufficient = cashier ? amount > balance : false;
   const cashierPart =
-    mode === 'cashier' ? amount : Number(cashierAmount) || 0;
+    mode === 'cashier'
+      ? amount
+      : Number(String(cashierAmount).replace(',', '.')) || 0;
   const externalPart = mode === 'external' ? amount : amount - cashierPart;
 
   const submit = async (event: React.FormEvent) => {
@@ -1912,18 +1951,26 @@ function PayBillModal({
           Carregando caixa...
         </p>
       ) : (
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-5">
           <Notice error={error} />
-          <p className="text-sm text-slate-600">
-            Valor da conta:{' '}
-            <strong>{display(amount, 'amount')}</strong>
-            {cashier && (
-              <>
-                {' · '}Saldo do caixa:{' '}
-                <strong>{display(balance, 'balance')}</strong>
-              </>
-            )}
-          </p>
+          {/* Resumo da operação: valor da conta e saldo disponível do caixa. */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className={detailBoxClass}>
+              <p className={detailLabelClass}>Valor da conta</p>
+              <p className={detailValueClass}>{display(amount, 'amount')}</p>
+            </div>
+            <div className={detailBoxClass}>
+              <p className={detailLabelClass}>
+                Caixa
+                {cashier?.cashierNumber != null &&
+                  ` #${cashier.cashierNumber}`}{' '}
+                · Saldo
+              </p>
+              <p className={detailValueClass}>
+                {cashier ? display(balance, 'balance') : 'Sem caixa aberto'}
+              </p>
+            </div>
+          </div>
           {!cashier && (
             <Notice message="Você não possui caixa aberto. A liquidação será registrada apenas como pagamento externo." />
           )}
@@ -1932,60 +1979,90 @@ function PayBillModal({
               error={`O saldo atual do caixa (${display(balance, 'balance')}) não é suficiente para liquidar esta conta por completo. Você pode combinar com uma forma externa.`}
             />
           )}
+          {/* Opções de liquidação em cards selecionáveis. */}
           <div className="space-y-2">
-            {cashier && !insufficient && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  checked={mode === 'cashier'}
-                  onChange={() => setMode('cashier')}
-                />
-                {isPay ? 'Pagar' : 'Receber'} totalmente pelo caixa
-              </label>
-            )}
-            {cashier && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  checked={mode === 'combined'}
-                  onChange={() => setMode('combined')}
-                />
-                Combinar caixa + forma externa
-              </label>
-            )}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                checked={mode === 'external'}
-                onChange={() => setMode('external')}
-              />
-              Somente forma externa (não movimenta o caixa)
-            </label>
+            {[
+              cashier && !insufficient
+                ? {
+                    value: 'cashier',
+                    title: `${isPay ? 'Pagar' : 'Receber'} totalmente pelo caixa`,
+                    hint: `Sai ${display(amount, 'amount')} do saldo do caixa`,
+                  }
+                : null,
+              cashier
+                ? {
+                    value: 'combined',
+                    title: 'Combinar caixa + forma externa',
+                    hint: 'Parte do caixa e o restante por fora',
+                  }
+                : null,
+              {
+                value: 'external',
+                title: 'Somente forma externa',
+                hint: 'Não movimenta o caixa',
+              },
+            ]
+              .filter(
+                (option): option is { value: string; title: string; hint: string } =>
+                  Boolean(option)
+              )
+              .map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
+                    mode === option.value
+                      ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    className="mt-0.5 accent-blue-600"
+                    checked={mode === option.value}
+                    onChange={() => setMode(option.value as typeof mode)}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-slate-900">
+                      {option.title}
+                    </span>
+                    <span className="block text-xs text-slate-500">
+                      {option.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
           </div>
           {mode === 'combined' && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <label className="admin-label">
                 Valor do caixa (R$)
+                {/* inputMode decimal evita as setas nativas do type=number;
+                    aceita vírgula ou ponto como separador. */}
                 <input
                   className="admin-input mt-1"
-                  type="number"
-                  min="0.01"
-                  max={Math.min(amount, balance)}
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
                   required
                   value={cashierAmount}
-                  onChange={(event) => setCashierAmount(event.target.value)}
+                  onChange={(event) =>
+                    setCashierAmount(
+                      event.target.value.replace(/[^\d.,]/g, '')
+                    )
+                  }
                 />
               </label>
-              <p className="self-end text-sm text-slate-600">
-                Restante por fora:{' '}
-                <strong>{display(Math.max(0, externalPart), 'amount')}</strong>
+              <p className="mt-3 flex items-center justify-between text-sm text-slate-600">
+                Restante por fora:
+                <strong className="text-slate-900">
+                  {display(Math.max(0, externalPart), 'amount')}
+                </strong>
               </p>
             </div>
           )}
           {(mode === 'combined' && externalPart > 0) || mode === 'external' ? (
             <label className="admin-label">
-              Identificador da forma externa
+              Forma de pagamento externa
               <select
                 className="admin-input mt-1"
                 value={externalMethod}

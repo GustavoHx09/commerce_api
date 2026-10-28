@@ -245,7 +245,9 @@ export function RecordForm({
   // Campos que entram na validação/payload: hidden (ex.: documentType) fica
   // fora do render, mas o valor continua sendo enviado ao backend.
   const submittable = fields.filter(
-    (field) => !field.readOnly && (!editing || !field.createOnly)
+    (field) =>
+      !field.readOnly &&
+      (editing ? !field.createOnly : !field.editOnly)
   );
   const visible = submittable.filter((field) => !field.hidden);
   const [values, setValues] = useState<Record<string, string>>(() =>

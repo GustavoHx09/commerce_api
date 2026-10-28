@@ -6,6 +6,18 @@
   :focus-visible {
     @apply outline outline-2 outline-offset-4 outline-blue-500;
   }
+
+  /* Remove as setas nativas dos inputs numéricos — o campo continua
+     aceitando números, só sem o seletor de incremento/decremento. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
