@@ -98,6 +98,11 @@ export default function ReportScreen() {
   // Filtro de tipo exibido apenas no relatório de movimentações de estoque.
   const [movementType, setMovementType] = useState('');
   const [query, setQuery] = useState<Record<string, string>>({});
+  // Relatório aplicado na última geração — o select só prepara a tela,
+  // a busca acontece quando o usuário clica em "Gerar relatório".
+  const [appliedKind, setAppliedKind] = useState('sales');
+  // Listagem sob demanda, mesmo padrão das demais telas.
+  const [searched, setSearched] = useState(false);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
@@ -106,23 +111,40 @@ export default function ReportScreen() {
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!tenantId) return;
+    if (!tenantId || !searched) {
+      setRows([]);
+      setSummary({});
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const response = await client.get(`/reports/${kind}`, {
+      const response = await client.get(`/reports/${appliedKind}`, {
         params: {
           groupBy: 'day',
           ...query,
           page,
-          limit: kind === 'products' ? 100 : 20,
+          limit: appliedKind === 'products' ? 100 : 20,
         },
       });
       const result = response.data.data;
-      setRows(kind === 'inventory' ? result.products.data : result.data || []);
+      const data =
+        (appliedKind === 'inventory' ? result.products.data : result.data || []) as Row[];
+      // Zeros numéricos viram "—" na tabela: mais fácil de ler as colunas
+      // de valores quando a maioria das linhas é zero.
+      setRows(
+        data.map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [
+              key,
+              typeof value === 'number' && value === 0 ? null : value,
+            ])
+          )
+        )
+      );
       setSummary(result.summary || {});
       setPages(
-        kind === 'inventory'
+        appliedKind === 'inventory'
           ? result.products.pagination.totalPages
           : result.pagination?.totalPages || 0
       );
@@ -133,7 +155,7 @@ export default function ReportScreen() {
     } finally {
       setLoading(false);
     }
-  }, [client, tenantId, kind, query, page]);
+  }, [client, tenantId, appliedKind, query, page, searched]);
   useEffect(() => {
     startTransition(() => {
       void load();
@@ -160,6 +182,8 @@ export default function ReportScreen() {
                 return;
               }
               setPage(1);
+              setSearched(true);
+              setAppliedKind(kind);
               setQuery({
                 ...(start ? { startDate: `${start}T00:00:00.000Z` } : {}),
                 ...(end ? { endDate: `${end}T23:59:59.999Z` } : {}),
@@ -175,7 +199,12 @@ export default function ReportScreen() {
                   className="admin-input mt-1"
                   value={kind}
                   onChange={(event) => {
+                    // Trocar de relatório limpa o resultado anterior e
+                    // volta a exigir o clique em "Gerar relatório".
                     setKind(event.target.value);
+                    setSearched(false);
+                    setRows([]);
+                    setSummary({});
                     setPage(1);
                   }}
                 >
@@ -260,7 +289,7 @@ export default function ReportScreen() {
           </form>
           {/* No fluxo de caixa os cards de resumo são redundantes: a
               tabela já traz os mesmos valores linha a linha. */}
-          {kind !== 'cash-flow' && (
+          {searched && appliedKind !== 'cash-flow' && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {Object.entries(summary)
                 .filter(([key]) => key !== '_id')
@@ -276,12 +305,17 @@ export default function ReportScreen() {
                 ))}
             </div>
           )}
-          {loading ? (
+          {!searched ? (
+            <div className="admin-panel py-12 text-center text-sm text-slate-500">
+              Configure os filtros e clique em Gerar relatório para visualizar
+              os dados.
+            </div>
+          ) : loading ? (
             <p role="status">Carregando relatório...</p>
           ) : (
-            <DataTable rows={rows} columns={reports[kind].columns} />
+            <DataTable rows={rows} columns={reports[appliedKind].columns} />
           )}
-          {pages > 0 && (
+          {searched && pages > 0 && (
             <div className="flex items-center justify-end gap-3">
               <button
                 className="admin-secondary"
@@ -302,7 +336,7 @@ export default function ReportScreen() {
               </button>
             </div>
           )}
-          {kind === 'products' && (
+          {searched && appliedKind === 'products' && (
             <p className="text-xs text-slate-500">
               Exibindo até 100 produtos mais vendidos no período.
             </p>

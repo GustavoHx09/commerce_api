@@ -303,6 +303,7 @@ export const screens: Record<string, Screen> = {
     description:
       'Abra seu caixa, registre sangrias e reforços e consulte os fechamentos.',
     endpoint: '/cashiers',
+    search: true,
     detailKey: 'cashier',
     columns: [
       ['cashierNumber', 'Caixa'],
@@ -533,6 +534,15 @@ export function display(value: unknown, key = ''): string {
   }
   if (key === 'orderNumber' || key === 'cashierNumber')
     return `#${String(value)}`;
+  // Período dos relatórios vem em ISO (2026-10-28, 2026-10 ou 2026):
+  // exibe em pt-BR sem passar por fuso (a data já é UTC do agrupamento).
+  if (key === 'period') {
+    const text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text))
+      return text.split('-').reverse().join('/');
+    if (/^\d{4}-\d{2}$/.test(text)) return text.split('-').reverse().join('/');
+    return text;
+  }
   // Documentos, CEP e telefone sempre exibidos formatados.
   if (['document', 'cpf'].includes(key)) return formatDocument(value);
   if (key === 'zipCode') return formatCep(value);
