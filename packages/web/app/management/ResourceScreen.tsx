@@ -137,6 +137,11 @@ const canReverseBill = (row: Row, role?: string) =>
   ['admin', 'master'].includes(role || '') ||
   Date.now() - new Date(String(row.paidAt)).getTime() <= 30 * 60 * 1000;
 
+// Tipos de movimentação que entram dinheiro no caixa — espelha
+// INFLOW_TYPES do backend (cashierService.js).
+const isCashierInflow = (type: string) =>
+  ['suprimento', 'venda', 'recebimento_conta'].includes(type);
+
 const hiddenFields = new Set([
   '_id',
   'password',
@@ -926,14 +931,32 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           let data = response.data.data.data as Row[];
           // Nas movimentações de caixa, vendas/estornos exibem o valor total
           // da venda (vindo do pedido populado), e não só a parte em dinheiro.
+          // Cada linha também ganha a direção (Entrada/Saída) do fluxo.
           if (screen.endpoint === '/cashiers') {
-            data = data.map((mov) => ({
-              ...mov,
-              amount:
-                mov.orderId && typeof mov.orderId === 'object'
-                  ? ((mov.orderId as Row).amountPaid ?? (mov.orderId as Row).total)
-                  : mov.amount,
-            }));
+            data = data.map((mov) => {
+              // O motivo vem composto ("Estorno da conta: Pagamento fiado"):
+              // separa a operação do detalhe para virar duas colunas.
+              let operation = display(mov.type, 'type');
+              let note = String(mov.reason || '');
+              const sep = note.indexOf(':');
+              if (sep > 0) {
+                operation = note.slice(0, sep);
+                note = note.slice(sep + 1).trim();
+              } else if (note.startsWith(operation)) {
+                note = note.slice(operation.length).trim();
+              }
+              return {
+                ...mov,
+                amount:
+                  mov.orderId && typeof mov.orderId === 'object'
+                    ? ((mov.orderId as Row).amountPaid ??
+                      (mov.orderId as Row).total)
+                    : mov.amount,
+                operation,
+                note,
+                flow: isCashierInflow(String(mov.type)) ? 'Entrada' : 'Saída',
+              };
+            });
           }
           setRelated(data);
           setRelatedPages(response.data.data.pagination.totalPages);
@@ -1050,6 +1073,33 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
   // Caixas não têm edição de cadastro: só ações operacionais.
   const canEdit = Boolean(screen.fields) && screen.endpoint !== '/cashiers';
 
+  // Abre o formulário de cadastro. Para caixas, busca o valor de fechamento
+  // do caixa anterior para preencher o valor inicial travado.
+  const openNewRecord = async () => {
+    setLastClosing(null);
+    if (screen.endpoint === '/cashiers') {
+      try {
+        const response = await client.get('/cashiers', {
+          params: {
+            status: 'closed',
+            limit: 1,
+            sortBy: 'closedAt',
+            order: 'desc',
+          },
+        });
+        const last = response.data.data.data[0];
+        if (last && last.finalAmount != null) {
+          setLastClosing(Number(last.finalAmount));
+          setEditor({ initialAmount: Number(last.finalAmount) });
+          return;
+        }
+      } catch (cause) {
+        setError(errorMessage(cause));
+      }
+    }
+    setEditor({});
+  };
+
   return (
     <main className="mx-auto max-w-screen-2xl p-4 sm:p-8">
       <PageHeading title={screen.title} description={screen.description}>
@@ -1101,38 +1151,15 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               Imprimir / PDF
             </button>
           )}
-          {screen.fields && (
+          {/* Em Caixas o "Abrir caixa" mora dentro do card "Caixa do dia"
+              (e só aparece quando não há caixa aberto). */}
+          {screen.fields && !isCashiers && (
             <button
               disabled={!tenantId}
               className="admin-primary"
-              onClick={async () => {
-                setLastClosing(null);
-                if (screen.endpoint === '/cashiers') {
-                  try {
-                    const response = await client.get('/cashiers', {
-                      params: {
-                        status: 'closed',
-                        limit: 1,
-                        sortBy: 'closedAt',
-                        order: 'desc',
-                      },
-                    });
-                    const last = response.data.data.data[0];
-                    if (last && last.finalAmount != null) {
-                      setLastClosing(Number(last.finalAmount));
-                      setEditor({ initialAmount: Number(last.finalAmount) });
-                      return;
-                    }
-                  } catch (cause) {
-                    setError(errorMessage(cause));
-                  }
-                }
-                setEditor({});
-              }}
+              onClick={() => void openNewRecord()}
             >
-              {screen.endpoint === '/cashiers'
-                ? 'Abrir caixa'
-                : 'Novo cadastro'}
+              Novo cadastro
             </button>
           )}
         </div>
@@ -1143,7 +1170,9 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           <Notice message="Selecione uma empresa no cabeçalho para visualizar a área administrativa do cliente." />
         ) : (
           <>
-            {(screen.search || screen.filters) && (
+            {/* Caixas tem busca própria: o histórico de fechamentos é
+                pesquisado pelo painel dedicado abaixo do "Caixa do dia". */}
+            {!isCashiers && (screen.search || screen.filters) && (
               <form
                 className="admin-panel flex flex-wrap items-end gap-3"
                 onSubmit={(event) => {
@@ -1238,8 +1267,9 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                 </button>
               </form>
             )}
-            {/* A contagem e a lista só aparecem após uma busca. */}
-            {searched && (
+            {/* A contagem e a lista só aparecem após uma busca. Em Caixas,
+                o total vai no rodapé da listagem em vez desta linha. */}
+            {searched && !isCashiers && (
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>{total} registro(s)</span>
                 <button
@@ -1303,11 +1333,21 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                         )}
                       </>
                     )}
+                    {/* Sem caixa aberto, a abertura acontece aqui no card. */}
+                    {!openCashier && (
+                      <button
+                        className="admin-primary"
+                        disabled={!tenantId}
+                        onClick={() => void openNewRecord()}
+                      >
+                        Abrir caixa
+                      </button>
+                    )}
                     <button
                       className="admin-secondary"
                       onClick={() => setShowCashierHistory(!showCashierHistory)}
                     >
-                      {showCashierHistory ? 'Ocultar histórico' : 'Ver histórico de caixas'}
+                      {showCashierHistory ? 'Fechar busca' : 'Pesquisar históricos'}
                     </button>
                   </div>
                 </div>
@@ -1364,6 +1404,83 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                   </p>
                 )}
               </div>
+            )}
+            {/* Painel de busca do histórico de caixas fechados: abre pelo
+                botão "Pesquisar históricos" no resumo do caixa do dia. */}
+            {isCashiers && showCashierHistory && (
+              <form
+                className="admin-panel flex flex-wrap items-end gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (
+                    filters.startDate &&
+                    filters.endDate &&
+                    filters.startDate > filters.endDate
+                  ) {
+                    setError('A data inicial não pode ser posterior à final.');
+                    return;
+                  }
+                  setPage(1);
+                  setSearched(true);
+                  setApplied(filters);
+                }}
+              >
+                <div className="min-w-48 flex-1">
+                  <label htmlFor="cashier-search" className="admin-label">
+                    Nº do caixa
+                  </label>
+                  <input
+                    id="cashier-search"
+                    className="admin-input"
+                    value={filters.search || ''}
+                    placeholder="Ex.: 4 ou #4"
+                    onChange={(event) =>
+                      setFilters({ ...filters, search: event.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label htmlFor="cashier-start" className="admin-label">
+                    Data inicial
+                  </label>
+                  <input
+                    id="cashier-start"
+                    className="admin-input"
+                    type="date"
+                    value={filters.startDate || ''}
+                    onChange={(event) =>
+                      setFilters({ ...filters, startDate: event.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label htmlFor="cashier-end" className="admin-label">
+                    Data final
+                  </label>
+                  <input
+                    id="cashier-end"
+                    className="admin-input"
+                    type="date"
+                    value={filters.endDate || ''}
+                    onChange={(event) =>
+                      setFilters({ ...filters, endDate: event.target.value })
+                    }
+                  />
+                </div>
+                <button className="admin-primary">Buscar</button>
+                <button
+                  type="button"
+                  className="admin-secondary"
+                  onClick={() => {
+                    setFilters({});
+                    setApplied({});
+                    setSearched(false);
+                    setPage(1);
+                  }}
+                >
+                  Limpar
+                </button>
+              </form>
             )}
             {(isCashiers &&
               !showCashierHistory &&
@@ -1451,6 +1568,12 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                 Próxima
               </button>
             </div>
+            )}
+            {/* Em Caixas, o total de resultados aparece no fim da listagem. */}
+            {isCashiers && searched && !loading && (
+              <p className="text-right text-sm text-slate-500">
+                {total} registro(s) encontrados
+              </p>
             )}
           </>
         )}
@@ -1684,7 +1807,9 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                         ]
                       : [
                           ['createdAt', 'Data'],
-                          ['reason', 'Motivo'],
+                          ['operation', 'Operação'],
+                          ['note', 'Motivo'],
+                          ['flow', 'Tipo'],
                           ['amount', 'Valor', 'right'],
                         ]
                 }
