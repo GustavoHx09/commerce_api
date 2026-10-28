@@ -47,6 +47,7 @@ Regras e padrões que devem ser seguidos antes e durante qualquer alteração no
 - Antes de fazer qualquer commit ou push, pergunte ao usuário se deseja prosseguir.
 - Não saia commitando e subindo código sem permissão explícita.
 - Só faça o commit após o usuário confirmar que está tudo certo.
+- **Commits sempre separados por task/funcionalidade**: cada alteração ou grupo de alterações da mesma tarefa vira um commit próprio (ex.: um commit para o estorno de contas, outro para o número sequencial do caixa). Nunca misturar tasks diferentes no mesmo commit.
 
 ### Padrão de mensagens de commit
 
