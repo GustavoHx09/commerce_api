@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useWorkspaceApi } from '../AdminShell';
 import { useAuth } from '../context/AuthContext';
-import { addressFields, type Field, type Row } from './config';
+import {
+  addressFields,
+  display,
+  getValue,
+  type Field,
+  type Row,
+} from './config';
+import { hasPermission } from '@/lib/permissions';
 import { errorMessage, Modal, Notice, PageHeading, RecordForm } from './ui';
 import { RecordDetails } from './ResourceScreen';
 
@@ -20,11 +28,15 @@ const companyFields: Field[] = [
 
 export function CompanyScreen() {
   const { client, tenantId } = useWorkspaceApi();
-  const { refreshSession } = useAuth();
+  const { refreshSession, user } = useAuth();
   const [company, setCompany] = useState<Row | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [uploading, setUploading] = useState(false);
+  // O formulário nasce em modo leitura; Editar habilita os campos e troca
+  // o botão por Salvar/Voltar. O backend reforça a mesma permissão no PUT.
+  const [editingCompany, setEditingCompany] = useState(false);
+  const canEdit = hasPermission(user?.permissions, 'tenant:write');
   useEffect(() => {
     if (!tenantId) return;
     let active = true;
@@ -52,34 +64,58 @@ export function CompanyScreen() {
       ) : company ? (
         <>
           <section className="admin-panel">
-            <h2 className="mb-5 text-lg font-semibold">
-              Dados e personalização
-            </h2>
-            <p className="mb-5 text-sm text-slate-500">
-              Documento: {String(company.document || 'Não informado')} · Plano:{' '}
-              {String(company.plan || '—')}
-            </p>
-            <RecordForm
-              fields={companyFields}
-              initial={{
-                ...company,
-                colors: {
-                  primary: '#2563eb',
-                  secondary: '#1e40af',
-                  ...((company.colors as Row) || {}),
-                },
-              }}
-              editing
-              onSubmit={async (payload) => {
-                const response = await client.put('/tenants/me', payload);
-                setCompany(response.data.data.tenant);
-                await refreshSession();
-                setMessage('Dados salvos com sucesso.');
-              }}
-            />
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Dados e personalização
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Documento: {String(company.document || 'Não informado')} ·
+                  Plano: {String(company.plan || '—')}
+                </p>
+              </div>
+              {!editingCompany && canEdit && (
+                <button
+                  type="button"
+                  className="admin-secondary"
+                  onClick={() => {
+                    setError('');
+                    setMessage('');
+                    setEditingCompany(true);
+                  }}
+                >
+                  Editar
+                </button>
+              )}
+            </div>
+            {editingCompany ? (
+              <RecordForm
+                fields={companyFields}
+                initial={{
+                  ...company,
+                  colors: {
+                    primary: '#2563eb',
+                    secondary: '#1e40af',
+                    ...((company.colors as Row) || {}),
+                  },
+                }}
+                editing
+                onCancel={() => setEditingCompany(false)}
+                onSubmit={async (payload) => {
+                  const response = await client.put('/tenants/me', payload);
+                  setCompany(response.data.data.tenant);
+                  await refreshSession();
+                  setMessage('Dados salvos com sucesso.');
+                  setEditingCompany(false);
+                }}
+              />
+            ) : (
+              <CompanyDetails company={company} />
+            )}
           </section>
           <PaymentFeesSection
             fees={(company.paymentFees as Row) || {}}
+            canEdit={canEdit}
             onSaved={(fees) => {
               setCompany({ ...company, paymentFees: fees });
               setMessage('Taxas de pagamento salvas.');
@@ -89,88 +125,119 @@ export function CompanyScreen() {
           <CashierModeSection
             key={String(company.cashierMode || 'per_operator')}
             mode={String(company.cashierMode || 'per_operator')}
+            canEdit={canEdit}
             onSaved={(cashierMode) => {
               setCompany({ ...company, cashierMode });
               setMessage('Modo de operação do caixa salvo.');
             }}
           />
           <section className="admin-panel">
-            <h2 className="mb-2 text-lg font-semibold">Logo da empresa</h2>
-            <p className="mb-4 text-sm text-slate-500">
-              Envie uma imagem PNG, JPEG ou WebP de até 2 MB.
+            <h2 className="text-lg font-semibold">Logo da empresa</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              PNG, JPEG ou WebP de até 2 MB. A logo aparece no menu lateral.
             </p>
-            <input
-              aria-label="Enviar logo da empresa"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={uploading}
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                setError('');
-                if (
-                  !['image/png', 'image/jpeg', 'image/webp'].includes(
-                    file.type
-                  ) ||
-                  file.size > 2 * 1024 * 1024
-                ) {
-                  setError('Escolha uma imagem PNG, JPEG ou WebP de até 2 MB.');
-                  return;
-                }
-                setUploading(true);
-                try {
-                  const body = new FormData();
-                  body.append('logo', file);
-                  const response = await client.post('/tenants/me/logo', body);
-                  setCompany(response.data.data.tenant);
-                  await refreshSession();
-                  setMessage('Logo atualizada com sucesso.');
-                } catch (cause) {
-                  setError(errorMessage(cause));
-                } finally {
-                  setUploading(false);
-                }
-              }}
-            />
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              {typeof company.logoUrl === 'string' && company.logoUrl ? (
+                <Image
+                  src={company.logoUrl}
+                  alt="Logo da empresa"
+                  width={64}
+                  height={64}
+                  unoptimized
+                  className="h-16 w-16 rounded-xl border border-slate-200 bg-white object-contain p-1"
+                />
+              ) : (
+                // Sem logo: mesma inicial azul exibida no menu lateral.
+                <span className="grid h-16 w-16 place-items-center rounded-xl bg-blue-600 text-xl font-bold text-white">
+                  {String(company.displayName || company.name || 'E')
+                    .charAt(0)
+                    .toUpperCase()}
+                </span>
+              )}
+              {canEdit && (
+                <div className="flex flex-col gap-1">
+                  <label className="admin-secondary inline-flex cursor-pointer items-center justify-center">
+                    {uploading
+                      ? 'Enviando...'
+                      : company.logoUrl
+                        ? 'Trocar logo'
+                        : 'Enviar logo'}
+                    <input
+                      aria-label="Enviar logo da empresa"
+                      type="file"
+                      className="hidden"
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={uploading}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        // Reseta o input para permitir reenviar o mesmo arquivo.
+                        event.target.value = '';
+                        if (!file) return;
+                        setError('');
+                        if (
+                          ![
+                            'image/png',
+                            'image/jpeg',
+                            'image/webp',
+                          ].includes(file.type) ||
+                          file.size > 2 * 1024 * 1024
+                        ) {
+                          setError(
+                            'Escolha uma imagem PNG, JPEG ou WebP de até 2 MB.'
+                          );
+                          return;
+                        }
+                        setUploading(true);
+                        try {
+                          const body = new FormData();
+                          body.append('logo', file);
+                          const response = await client.post(
+                            '/tenants/me/logo',
+                            body
+                          );
+                          setCompany(response.data.data.tenant);
+                          await refreshSession();
+                          setMessage('Logo atualizada com sucesso.');
+                        } catch (cause) {
+                          setError(errorMessage(cause));
+                        } finally {
+                          setUploading(false);
+                        }
+                      }}
+                    />
+                  </label>
+                  {typeof company.logoUrl === 'string' && company.logoUrl && (
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-red-700 hover:underline disabled:opacity-50"
+                      disabled={uploading}
+                      onClick={async () => {
+                        setError('');
+                        setUploading(true);
+                        try {
+                          const response = await client.put('/tenants/me', {
+                            logoUrl: null,
+                          });
+                          setCompany(response.data.data.tenant);
+                          await refreshSession();
+                          setMessage('Logo removida com sucesso.');
+                        } catch (cause) {
+                          setError(errorMessage(cause));
+                        } finally {
+                          setUploading(false);
+                        }
+                      }}
+                    >
+                      Remover logo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {uploading && (
               <p role="status" className="mt-3 text-sm">
                 Enviando imagem...
               </p>
-            )}
-            {typeof company.logoUrl === 'string' && company.logoUrl && (
-              <div className="mt-4 flex items-center gap-4">
-                <a
-                  className="text-sm text-blue-700 underline"
-                  href={company.logoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Visualizar logo atual
-                </a>
-                <button
-                  type="button"
-                  className="text-sm font-medium text-red-700 hover:underline disabled:opacity-50"
-                  disabled={uploading}
-                  onClick={async () => {
-                    setError('');
-                    setUploading(true);
-                    try {
-                      const response = await client.put('/tenants/me', {
-                        logoUrl: null,
-                      });
-                      setCompany(response.data.data.tenant);
-                      await refreshSession();
-                      setMessage('Logo removida com sucesso.');
-                    } catch (cause) {
-                      setError(errorMessage(cause));
-                    } finally {
-                      setUploading(false);
-                    }
-                  }}
-                >
-                  Remover logo
-                </button>
-              </div>
             )}
           </section>
         </>
@@ -181,14 +248,58 @@ export function CompanyScreen() {
   );
 }
 
+// Visão somente leitura dos dados da empresa: mesma ordem de campos do
+// formulário, valores formatados (telefone/CEP) e amostra das cores.
+function CompanyDetails({ company }: { company: Row }) {
+  return (
+    <dl className="grid gap-3 sm:grid-cols-2">
+      {companyFields.map((field) => {
+        const raw = getValue(company, field.key);
+        const hex =
+          field.type === 'color' && /^#[0-9a-f]{6}$/i.test(String(raw || ''))
+            ? String(raw)
+            : null;
+        return (
+          <div
+            key={field.key}
+            className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+          >
+            <dt className="mb-1 text-xs font-semibold uppercase text-slate-500">
+              {field.label}
+            </dt>
+            <dd className="text-sm font-medium text-slate-900">
+              {hex ? (
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="h-4 w-4 rounded-full border border-slate-300"
+                    style={{ backgroundColor: hex }}
+                  />
+                  {hex}
+                </span>
+              ) : (
+                // O último segmento da chave garante a máscara certa nos
+                // campos aninhados (ex.: address.zipCode → zipCode).
+                display(raw, field.key.split('.').pop() || field.key)
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 // Configuração das taxas de recebimento do tenant: pix/débito e a tabela de
 // juros por parcela do crédito (repassados ao cliente no PDV).
 function PaymentFeesSection({
   fees,
   onSaved,
+  canEdit,
 }: {
   fees: Row;
   onSaved: (fees: Row) => void;
+  canEdit: boolean;
 }) {
   const { client } = useWorkspaceApi();
   const [open, setOpen] = useState(false);
@@ -245,6 +356,11 @@ function PaymentFeesSection({
     }
   };
 
+  // Parcelas de crédito ordenadas para exibição nos selos do resumo.
+  const creditRows = ((fees.creditInstallments as Row[]) || [])
+    .slice()
+    .sort((a, b) => Number(a.installments) - Number(b.installments));
+
   return (
     <section className="admin-panel">
       <div className="flex items-center justify-between gap-3">
@@ -253,19 +369,58 @@ function PaymentFeesSection({
           <p className="text-sm text-slate-500">
             Percentuais de pix, débito e juros do crédito por parcela.
           </p>
-          <p className="mt-2 text-sm text-slate-700">
-            Pix: {Number(fees.pixPercent ?? 0)}% · Débito:{' '}
-            {Number(fees.debitPercent ?? 0)}% · Parcelas configuradas:{' '}
-            {((fees.creditInstallments as Row[]) || []).length || 'nenhuma (até 12x sem juros)'}
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            className="admin-primary whitespace-nowrap"
+            onClick={() => setOpen(true)}
+          >
+            Configurar taxas
+          </button>
+        )}
+      </div>
+      {/* Resumo das taxas em cards: percentuais diretos de pix/débito e a
+          tabela de juros do crédito como selos por parcela. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+            Pix
+          </p>
+          <p className="text-lg font-semibold text-slate-900">
+            {Number(fees.pixPercent ?? 0)}%
           </p>
         </div>
-        <button
-          type="button"
-          className="admin-primary whitespace-nowrap"
-          onClick={() => setOpen(true)}
-        >
-          Configurar taxas
-        </button>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+            Cartão de débito
+          </p>
+          <p className="text-lg font-semibold text-slate-900">
+            {Number(fees.debitPercent ?? 0)}%
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+          Cartão de crédito · juros por parcela
+        </p>
+        {creditRows.length ? (
+          <ul className="mt-2 flex flex-wrap gap-1">
+            {creditRows.map((entry) => (
+              <li
+                key={String(entry.installments)}
+                className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700"
+              >
+                {String(entry.installments)}x ·{' '}
+                {String(entry.interestPercent)}%
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm font-medium text-slate-900">
+            Sem juros até 12x
+          </p>
+        )}
       </div>
       {open && (
         <Modal title="Configurar taxas" onClose={() => setOpen(false)}>
@@ -412,66 +567,114 @@ function PaymentFeesSection({
 function CashierModeSection({
   mode,
   onSaved,
+  canEdit,
 }: {
   mode: string;
   onSaved: (mode: string) => void;
+  canEdit: boolean;
 }) {
   const { client } = useWorkspaceApi();
+  // Mesmo fluxo da seção de dados: nasce em leitura; Editar habilita o
+  // select e troca o botão por Salvar/Voltar; salvar remonta via key.
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(mode);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   return (
     <section className="admin-panel">
-      <h2 className="text-lg font-semibold">Operação do caixa</h2>
-      <p className="mb-4 text-sm text-slate-500">
-        Define se cada operador trabalha com o próprio caixa ou se a empresa usa
-        um caixa único compartilhado.
-      </p>
-      <Notice error={error} />
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="admin-label min-w-64">
-          Modo de operação
-          <select
-            className="admin-input mt-1"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Operação do caixa</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Define se cada operador trabalha com o próprio caixa ou se a
+            empresa usa um caixa único compartilhado.
+          </p>
+        </div>
+        {!editing && canEdit && (
+          <button
+            type="button"
+            className="admin-secondary"
+            onClick={() => {
+              setError('');
+              setValue(mode);
+              setEditing(true);
+            }}
           >
-            <option value="per_operator">
-              Por operador (um caixa por usuário)
-            </option>
-            <option value="shared">
-              Compartilhado (caixa único da empresa)
-            </option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="admin-primary"
-          disabled={busy || value === mode}
-          onClick={async () => {
-            setError('');
-            setBusy(true);
-            try {
-              const response = await client.put('/tenants/me', {
-                cashierMode: value,
-              });
-              onSaved(String(response.data.data.tenant.cashierMode));
-            } catch (cause) {
-              setError(errorMessage(cause));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {busy ? 'Salvando...' : 'Salvar'}
-        </button>
+            Editar
+          </button>
+        )}
       </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">
-        {value === 'shared'
-          ? 'Compartilhado: apenas um caixa fica aberto por vez e qualquer operador autorizado vende, sangra e fecha esse caixa.'
-          : 'Por operador: cada usuário abre o próprio caixa e só vende nele — ideal para lojas com vários pontos de venda.'}
-      </p>
+      <Notice error={error} />
+      {editing ? (
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="admin-label min-w-64">
+            Modo de operação
+            <select
+              className="admin-input mt-1"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            >
+              <option value="per_operator">
+                Por operador (um caixa por usuário)
+              </option>
+              <option value="shared">
+                Compartilhado (caixa único da empresa)
+              </option>
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="admin-secondary"
+              disabled={busy}
+              onClick={() => {
+                setValue(mode);
+                setEditing(false);
+              }}
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              className="admin-primary"
+              disabled={busy || value === mode}
+              onClick={async () => {
+                setError('');
+                setBusy(true);
+                try {
+                  const response = await client.put('/tenants/me', {
+                    cashierMode: value,
+                  });
+                  onSaved(String(response.data.data.tenant.cashierMode));
+                } catch (cause) {
+                  setError(errorMessage(cause));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase text-slate-500">
+            Modo de operação
+          </p>
+          <p className="text-sm font-medium text-slate-900">
+            {mode === 'shared'
+              ? 'Compartilhado (caixa único da empresa)'
+              : 'Por operador (um caixa por usuário)'}
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            {mode === 'shared'
+              ? 'Compartilhado: apenas um caixa fica aberto por vez e qualquer operador autorizado vende, sangra e fecha esse caixa.'
+              : 'Por operador: cada usuário abre o próprio caixa e só vende nele — ideal para lojas com vários pontos de venda.'}
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -505,93 +708,277 @@ export function AccountScreen() {
   );
 }
 
+// Recursos disponíveis para exportação (a API entrega o arquivo completo)
+// e para importação em massa por arquivo.
+const EXPORT_RESOURCES = [
+  ['products', 'Produtos'],
+  ['categories', 'Categorias'],
+  ['customers', 'Clientes'],
+  ['suppliers', 'Fornecedores'],
+  ['orders', 'Vendas'],
+  ['stockmovements', 'Movimentações de estoque'],
+  ['bills', 'Contas a pagar/receber'],
+  ['payments', 'Recebimentos'],
+] as const;
+
+const IMPORT_RESOURCES = [
+  ['products', 'Produtos'],
+  ['categories', 'Categorias'],
+  ['customers', 'Clientes'],
+  ['suppliers', 'Fornecedores'],
+] as const;
+
+// Modelos CSV baixáveis: cabeçalho aceito pela importação + uma linha de
+// exemplo — os mesmos campos emitidos pela exportação (exporta→importa).
+const IMPORT_TEMPLATES: Record<string, string> = {
+  products:
+    'name,sku,unit,price,costPrice,minStock,quantityInStock,category,isActive\n' +
+    'Produto Exemplo,EX-01,un,19.90,12.50,5,10,Categoria Exemplo,true\n',
+  categories:
+    'name,description,isActive\nLimpeza,Produtos de limpeza,true\n',
+  customers:
+    'name,document,documentType,phone,email,address.street,address.number,address.complement,address.neighborhood,address.city,address.state,address.zipCode,isActive\n' +
+    'Cliente Exemplo,12345678900,cpf,11999998888,cliente@email.com,Rua Exemplo,100,,Centro,São Paulo,SP,01000000,true\n',
+  suppliers:
+    'name,document,documentType,phone,email,contactName,address.street,address.number,address.complement,address.neighborhood,address.city,address.state,address.zipCode,isActive\n' +
+    'Fornecedor Exemplo,12345678000199,cnpj,1133334444,forn@email.com,Contato Exemplo,Rua Exemplo,200,,Centro,São Paulo,SP,01000000,true\n',
+};
+
+// Resultado devolvido pela API de importação: erros por número da linha.
+interface ImportResult {
+  total: number;
+  created: number;
+  errors: { line: number; message: string }[];
+}
+
 export function ExportScreen() {
   const { client, tenantId } = useWorkspaceApi();
+  const { user } = useAuth();
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  // Exportação: recurso e formato escolhidos no card.
+  const [resource, setResource] = useState('products');
+  const [format, setFormat] = useState('csv');
+  // Importação: recurso, arquivo escolhido e último resultado retornado.
+  const [importTarget, setImportTarget] = useState('products');
+  const [file, setFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // A importação escreve dados: o card inteiro some para quem não tem
+  // :write de nenhum recurso — a API continua bloqueando sem permissão.
+  const canImport = (value: string) =>
+    user?.role === 'master' ||
+    hasPermission(user?.permissions, `${value}:write`);
+  const importable = IMPORT_RESOURCES.filter(([value]) => canImport(value));
+
+  // Baixa o recurso inteiro: o filename vem do Content-Disposition da API
+  // (recurso_ano-mes-dia.ext) com fallback local.
+  const downloadExport = async () => {
+    setError('');
+    setMessage('');
+    setBusy(true);
+    try {
+      const response = await client.get(`/export/${resource}`, {
+        params: { format },
+        responseType: 'blob',
+      });
+      const disposition = String(response.headers['content-disposition'] || '');
+      const filename =
+        disposition.match(/filename="([^"]+)"/)?.[1] ||
+        `${resource}-${new Date().toISOString().slice(0, 10)}.${format}`;
+      const url = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const count = response.headers['x-total-count'];
+      setMessage(
+        `Arquivo gerado com ${count || 'todos os'} registro(s) disponíveis.`
+      );
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Gera o modelo CSV do recurso escolhido — o usuário preenche e sobe.
+  const downloadTemplate = () => {
+    const blob = new Blob([IMPORT_TEMPLATES[importTarget]], {
+      type: 'text/csv',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `modelo-${importTarget}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const submitImport = async () => {
+    setError('');
+    setMessage('');
+    setImportResult(null);
+    if (!file) {
+      setError('Escolha um arquivo .csv ou .json para importar.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await client.post(`/import/${importTarget}`, body);
+      const result = response.data.data as ImportResult;
+      setImportResult(result);
+      setFile(null);
+      setMessage(
+        result.errors.length === 0
+          ? `${result.created} registro(s) importados com sucesso.`
+          : `${result.created} de ${result.total} registro(s) importados. Corrija as linhas com erro e envie novamente.`
+      );
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-4xl space-y-5 p-4 sm:p-8">
       <PageHeading
-        title="Exportações"
-        description="Baixe os dados da empresa em CSV ou JSON. A exportação da API é paginada: cada arquivo contém até 1.000 registros."
+        title="Importação e exportação"
+        description="Baixe os dados da empresa ou importe cadastros em massa a partir de arquivos CSV/JSON."
       />
       <Notice error={error} message={message} />
       {!tenantId ? (
         <Notice message="Selecione uma empresa no cabeçalho." />
       ) : (
-        <section className="admin-panel">
-          <RecordForm
-            fields={[
-              {
-                key: 'resource',
-                label: 'Dados',
-                required: true,
-                options: [
-                  ['products', 'Produtos'],
-                  ['categories', 'Categorias'],
-                  ['customers', 'Clientes'],
-                  ['suppliers', 'Fornecedores'],
-                  ['orders', 'Vendas'],
-                ],
-              },
-              {
-                key: 'format',
-                label: 'Formato',
-                required: true,
-                options: [
-                  ['csv', 'CSV'],
-                  ['json', 'JSON'],
-                ],
-              },
-              {
-                key: 'page',
-                label: 'Página',
-                type: 'number',
-                required: true,
-                min: 1,
-              },
-            ]}
-            initial={{ resource: 'products', format: 'csv', page: 1 }}
-            submitLabel={busy ? 'Exportando...' : 'Baixar arquivo'}
-            onSubmit={async (payload) => {
-              setError('');
-              setMessage('');
-              if (!Number.isInteger(payload.page))
-                throw new Error('A página deve ser um número inteiro.');
-              setBusy(true);
-              try {
-                const response = await client.get(
-                  `/export/${payload.resource}`,
-                  {
-                    params: {
-                      format: payload.format,
-                      page: payload.page,
-                      limit: 1000,
-                    },
-                    responseType: 'blob',
-                  }
-                );
-                const url = URL.createObjectURL(response.data);
-                const anchor = document.createElement('a');
-                anchor.href = url;
-                anchor.download = `${payload.resource}-pagina-${payload.page}.${payload.format}`;
-                document.body.appendChild(anchor);
-                anchor.click();
-                anchor.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                const count = response.headers['x-total-count'];
-                setMessage(
-                  `Arquivo da página ${payload.page} gerado.${count ? ` Total disponível: ${count} registros.` : ' Para mais de 1.000 registros, baixe as páginas seguintes.'}`
-                );
-              } catch (cause) {
-                setError(errorMessage(cause));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        </section>
+        <>
+          <section className="admin-panel">
+            <h2 className="text-lg font-semibold">Exportar dados</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              O arquivo sai completo, com todos os registros do recurso
+              escolhido — sem paginação.
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="admin-label min-w-56">
+                Dados
+                <select
+                  className="admin-input mt-1"
+                  value={resource}
+                  onChange={(event) => setResource(event.target.value)}
+                >
+                  {EXPORT_RESOURCES.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-label">
+                Formato
+                <select
+                  className="admin-input mt-1"
+                  value={format}
+                  onChange={(event) => setFormat(event.target.value)}
+                >
+                  <option value="csv">CSV</option>
+                  <option value="json">JSON</option>
+                </select>
+              </label>
+              {/* mb-1.5 iguala a margem das labels para alinhar com inputs. */}
+              <button
+                type="button"
+                className="admin-primary mb-1.5"
+                disabled={busy}
+                onClick={() => void downloadExport()}
+              >
+                {busy ? 'Gerando...' : 'Baixar arquivo'}
+              </button>
+            </div>
+          </section>
+          {importable.length > 0 && (
+          <section className="admin-panel">
+            <h2 className="text-lg font-semibold">Importar dados</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              CSV ou JSON no formato do modelo. Cada registro criado fica
+              auditado; o estoque inicial vira movimentação de entrada — por
+              isso a importação de produtos com saldo exige permissão de
+              suprimento.
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="admin-label min-w-56">
+                Dados
+                <select
+                  className="admin-input mt-1"
+                  value={importTarget}
+                  onChange={(event) => {
+                    setImportTarget(event.target.value);
+                    setFile(null);
+                    setImportResult(null);
+                  }}
+                >
+                  {importable.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-secondary mb-1.5 inline-flex cursor-pointer items-center justify-center">
+                {file ? file.name : 'Escolher arquivo'}
+                <input
+                  aria-label="Arquivo de importação"
+                  type="file"
+                  className="hidden"
+                  accept=".csv,.json"
+                  onChange={(event) => {
+                    setFile(event.target.files?.[0] || null);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className="admin-secondary mb-1.5"
+                onClick={downloadTemplate}
+              >
+                Baixar modelo
+              </button>
+              <button
+                type="button"
+                className="admin-primary mb-1.5"
+                disabled={busy || !file}
+                onClick={() => void submitImport()}
+              >
+                {busy ? 'Importando...' : 'Importar'}
+              </button>
+            </div>
+            {/* Linhas recusadas pela validação voltam aqui com número e
+                motivo — o usuário corrige e reenvia só elas. */}
+            {importResult && importResult.errors.length > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold uppercase text-amber-700">
+                  Linhas não importadas ({importResult.errors.length})
+                </p>
+                <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-slate-700">
+                  {importResult.errors.map((entry) => (
+                    <li key={entry.line}>
+                      <span className="font-medium">Linha {entry.line}:</span>{' '}
+                      {entry.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+          )}
+        </>
       )}
     </main>
   );

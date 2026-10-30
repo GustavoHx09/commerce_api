@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { useWorkspaceApi } from '../AdminShell';
@@ -72,8 +71,6 @@ export default function DashboardPage() {
 
   if (!user) return null;
   const ready = !loading && Boolean(dashboard);
-  const name =
-    tenant?.displayName || tenant?.name || 'Sua operação, em um só lugar';
   const primary = /^#[0-9a-f]{6}$/i.test(tenant?.colors?.primary || '')
     ? tenant!.colors!.primary!
     : '#2563eb';
@@ -192,23 +189,12 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               Olá, {user.name.split(' ')[0]}. Boas-vindas!
             </h2>
-            <p className="mt-2 text-sm text-slate-300">{name}</p>
             <p className="mt-4 max-w-lg text-sm leading-6 text-slate-400">
               Acompanhe os números, cuide do estoque e tenha mais clareza para o
               próximo passo.
             </p>
           </div>
           <div className="flex flex-col items-start gap-4">
-            {tenant?.logoUrl && (
-              <Image
-                src={tenant.logoUrl}
-                alt={name}
-                width={52}
-                height={52}
-                unoptimized
-                className="h-14 w-14 rounded-lg bg-white p-1 object-contain"
-              />
-            )}
             <Link
               href="/management/pos"
               className="inline-flex items-center gap-3 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-blue-50"
