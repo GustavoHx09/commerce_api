@@ -118,6 +118,20 @@ describe('reportService', () => {
         );
     });
 
+    it('filters inventory report to products with stock', async () => {
+        mockGetInventorySummary.mockResolvedValue({ totalProducts: 1 });
+        mockGetInventoryReport.mockResolvedValue([{ name: 'Produto A' }]);
+
+        await getInventoryReportService({ inStock: 'true' }, 'tenantA');
+
+        expect(mockGetInventoryReport).toHaveBeenCalledWith(
+            expect.objectContaining({ quantityInStock: { $gt: 0 } }),
+            0,
+            10,
+            { name: -1 }
+        );
+    });
+
     it('returns stock movements report with pagination', async () => {
         mockGetStockMovementsReport.mockResolvedValue([{ productId: 'p1', type: 'out' }]);
         mockCountStockMovements.mockResolvedValue(1);
@@ -157,6 +171,23 @@ describe('reportService', () => {
         expect(result.data[0].outflow).toBe(5);
         expect(result.data[0].balance).toBe(75);
         expect(result.summary.balance).toBe(75);
+    });
+
+    // Venda estornada não entra em "Vendas em dinheiro": o estorno devolve
+    // o dinheiro ao cliente, então é descontado da coluna (e não entra em
+    // "Saídas", senão o valor seria descontado em dobro).
+    it('nets reversed sales out of cash sales in cash flow', async () => {
+        mockGetCashFlowSales.mockResolvedValue([{ period: '2026-09-05', total: 70 }]);
+        mockGetCashFlowBills.mockResolvedValue([]);
+        mockGetCashFlowMovements.mockResolvedValue([{ period: '2026-09-05', suprimentos: 10, sangrias: 5, cashSales: 70, estornos: 70, billsPayCashier: 0, billsReceiveCashier: 0 }]);
+
+        const result = await getCashFlowReportService({ groupBy: 'day' }, 'tenantA');
+
+        expect(result.data[0].cashSales).toBe(0);
+        expect(result.data[0].estornos).toBe(70);
+        expect(result.data[0].inflow).toBe(10);
+        expect(result.data[0].outflow).toBe(5);
+        expect(result.data[0].balance).toBe(5);
     });
 
     it('returns cash flow summary when groupBy is none', async () => {

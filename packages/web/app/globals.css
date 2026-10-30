@@ -113,6 +113,19 @@
     padding: 0;
     margin: 0;
   }
+  /* Documentos longos (relatórios): o position:fixed da .print-area faz o
+     mesmo bloco repetir em todas as páginas — aqui o fluxo volta ao
+     normal para a tabela paginar corretamente. */
+  .print-area.print-doc {
+    position: static;
+    padding: 12mm;
+  }
+  /* O portal do relatório é filho direto do body: escondendo os irmãos
+     com display:none some o espaço que o app oculto ainda ocuparia —
+     evita páginas em branco antes/depois da tabela impressa. */
+  body:has(> .print-doc) > :not(.print-doc) {
+    display: none !important;
+  }
   /* Layout de cupom não fiscal em bobina de 80mm. */
   .receipt {
     width: 72mm;

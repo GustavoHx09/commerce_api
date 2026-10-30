@@ -73,6 +73,59 @@ describe('order lifecycle integration', () => {
         expect(paymentsRes.status).toBe(200);
         expect(paymentsRes.body.data.data[0].status).toBe('canceled');
     });
+
+    it('audits product stock changes with the movement context', async () => {
+        const res = await agent.get('/api/v1/audit').query({
+            entityType: 'product',
+            entityId: product._id.toString(),
+        });
+        expect(res.status).toBe(200);
+        const logs = res.body.data.data;
+
+        // A baixa da venda (10 → 8) deve apontar a movimentação "out" da venda.
+        const saleLog = logs.find((log) => log.changes?.quantityInStock?.to === 8);
+        expect(saleLog).toBeDefined();
+        expect(saleLog.stockContext).toMatchObject({
+            type: 'out',
+            reason: 'Venda PDV',
+            reference: `Venda #${order.orderNumber}`,
+        });
+
+        // A devolução do cancelamento (8 → 10) aponta a movimentação "in".
+        const cancelLog = logs.find((log) => log.changes?.quantityInStock?.to === 10);
+        expect(cancelLog).toBeDefined();
+        expect(cancelLog.stockContext).toMatchObject({
+            type: 'in',
+            reason: 'Cancelamento de venda',
+            reference: `Venda #${order.orderNumber}`,
+        });
+    });
+
+    it('filters out sale-flow entries when manualOnly is set', async () => {
+        const res = await agent.get('/api/v1/audit').query({ manualOnly: 'true', limit: 50 });
+        expect(res.status).toBe(200);
+        const logs = res.body.data.data;
+
+        // Nenhuma criação de venda no escopo manual...
+        expect(logs.some((log) => log.entityType === 'order' && log.action === 'create')).toBe(false);
+        // ...mas o cancelamento da venda (edição manual) continua visível.
+        expect(logs.some((log) => log.entityType === 'order' && log.action === 'update')).toBe(true);
+        // E os cadastros/movimentações manuais também seguem presentes.
+        expect(logs.some((log) => log.entityType === 'product')).toBe(true);
+    });
+
+    it('resolves order payment ids into method and amount', async () => {
+        const res = await agent.get('/api/v1/audit').query({ entityType: 'order', limit: 50 });
+        expect(res.status).toBe(200);
+        const orderLog = res.body.data.data.find((log) => log.action === 'create');
+        expect(orderLog).toBeDefined();
+        // O id do pagamento é trocado por { method, amount, installments }.
+        expect(orderLog.changes.paymentIds).toHaveLength(1);
+        expect(orderLog.changes.paymentIds[0]).toMatchObject({
+            method: 'cash',
+            amount: 50,
+        });
+    });
 });
 
 describe('cashier balance integration', () => {

@@ -1,11 +1,17 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useWorkspaceApi } from '../AdminShell';
 import { display, type Row } from './config';
-import { DataTable, errorMessage, Notice, PageHeading } from './ui';
+import { DataTable, errorMessage, Modal, Notice, PageHeading } from './ui';
 
-const reports: Record<string, { label: string; columns: [string, string][] }> =
+// Terceiro item opcional da coluna define o alinhamento ('right' p/ valores).
+// Terceiro item opcional da coluna define o alinhamento ('right' p/ valores).
+const reports: Record<
+  string,
+  { label: string; columns: [string, string, ('left' | 'right')?][] }
+> =
   {
     sales: {
       label: 'Vendas por período',
@@ -20,9 +26,12 @@ const reports: Record<string, { label: string; columns: [string, string][] }> =
       label: 'Produtos mais vendidos',
       columns: [
         ['name', 'Produto'],
-        ['sku', 'SKU'],
-        ['quantity', 'Quantidade'],
-        ['revenue', 'Receita'],
+        ['quantity', 'Quantidade', 'right'],
+        ['costPrice', 'Custo', 'right'],
+        // Preço médio de venda = receita ÷ quantidade: ajuda a ver se o
+        // produto saiu pelo preço cheio ou com desconto.
+        ['avgPrice', 'Preço médio de venda', 'right'],
+        ['revenue', 'Receita', 'right'],
       ],
     },
     inventory: {
@@ -30,10 +39,11 @@ const reports: Record<string, { label: string; columns: [string, string][] }> =
       columns: [
         ['name', 'Produto'],
         ['sku', 'SKU'],
-        ['quantityInStock', 'Quantidade'],
-        ['minStock', 'Mínimo'],
-        ['price', 'Preço'],
-        ['costPrice', 'Custo'],
+        ['status', 'Situação'],
+        ['quantityInStock', 'Quantidade', 'right'],
+        ['minStock', 'Mínimo', 'right'],
+        ['price', 'Preço', 'right'],
+        ['costPrice', 'Custo', 'right'],
       ],
     },
     'stock-movements': {
@@ -94,7 +104,9 @@ export default function ReportScreen() {
   );
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [groupBy, setGroupBy] = useState('day');
-  const [lowStock, setLowStock] = useState(false);
+  // Situação do estoque: '' (todos), 'low' (estoque baixo) ou 'inStock'
+  // (somente produtos com saldo acima de zero).
+  const [stockStatus, setStockStatus] = useState('');
   // Filtro de tipo exibido apenas no relatório de movimentações de estoque.
   const [movementType, setMovementType] = useState('');
   const [query, setQuery] = useState<Record<string, string>>({});
@@ -109,6 +121,19 @@ export default function ReportScreen() {
   const [summary, setSummary] = useState<Row>({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Filtros específicos do relatório de posição de estoque.
+  const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  // Categorias carregadas só quando o relatório de estoque é escolhido.
+  const [categories, setCategories] = useState<Row[]>([]);
+  // Impressão da posição de estoque: o modal pergunta se saem os
+  // custos/preços ou uma coluna de observação para a conferência.
+  const [printModal, setPrintModal] = useState(false);
+  const [printRows, setPrintRows] = useState<Row[] | null>(null);
+  const [printCosts, setPrintCosts] = useState(false);
+  // Ordenação da impressão: alfabética pelo nome ou agrupada por
+  // categoria (categoria e produto em ordem alfabética).
+  const [printOrder, setPrintOrder] = useState<'alpha' | 'category'>('alpha');
 
   const load = useCallback(async () => {
     if (!tenantId || !searched) {
@@ -133,14 +158,34 @@ export default function ReportScreen() {
       // Zeros numéricos viram "—" na tabela: mais fácil de ler as colunas
       // de valores quando a maioria das linhas é zero.
       setRows(
-        data.map((row) =>
-          Object.fromEntries(
-            Object.entries(row).map(([key, value]) => [
+        data.map((row) => {
+          // Posição de estoque ganha coluna de situação (badge) calculada
+          // no front: quantidade igual ou abaixo do mínimo = estoque baixo.
+          const enriched =
+            appliedKind === 'inventory'
+              ? {
+                  ...row,
+                  status:
+                    Number(row.quantityInStock) <= Number(row.minStock)
+                      ? 'Estoque baixo'
+                      : 'Normal',
+                }
+              : appliedKind === 'products'
+                ? {
+                    ...row,
+                    // Preço médio de venda do produto no período.
+                    avgPrice: Number(row.quantity)
+                      ? Number(row.revenue) / Number(row.quantity)
+                      : 0,
+                  }
+                : row;
+          return Object.fromEntries(
+            Object.entries(enriched).map(([key, value]) => [
               key,
               typeof value === 'number' && value === 0 ? null : value,
             ])
-          )
-        )
+          );
+        })
       );
       setSummary(result.summary || {});
       setPages(
@@ -161,6 +206,62 @@ export default function ReportScreen() {
       void load();
     });
   }, [load]);
+
+  // Só busca categorias quando o relatório de posição de estoque é
+  // selecionado — são o filtro de categoria do formulário.
+  useEffect(() => {
+    if (kind !== 'inventory' || categories.length || !tenantId) return;
+    let active = true;
+    client
+      .get('/categories', { params: { limit: 100 } })
+      .then((response) => {
+        if (active) setCategories(response.data.data.data as Row[]);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [kind, categories.length, client, tenantId]);
+
+  // Impressão: busca a posição completa com os mesmos filtros aplicados
+  // e abre a janela nativa — só a .print-area fica visível no papel
+  // (ver globals.css). A API limita a 100 por página, então percorre
+  // todas as páginas para o relatório sair com o estoque inteiro.
+  const handlePrint = async (withCosts: boolean) => {
+    setPrintCosts(withCosts);
+    setPrintModal(false);
+    try {
+      const list: Row[] = [];
+      let printPage = 1;
+      let printTotalPages = 1;
+      do {
+        const response = await client.get(`/reports/${appliedKind}`, {
+          params: { ...query, page: printPage, limit: 100 },
+        });
+        const products = response.data.data.products;
+        list.push(...((products?.data || []) as Row[]));
+        printTotalPages = products?.pagination?.totalPages || 0;
+        printPage++;
+      } while (printPage <= printTotalPages);
+      // Ordenação escolhida no modal — por categoria agrupa em ordem
+      // alfabética de categoria e, dentro dela, de produto.
+      const collator = new Intl.Collator('pt-BR');
+      const categoryName = (row: Row) =>
+        String((row.categoryId as Row)?.name || '—');
+      list.sort(
+        printOrder === 'category'
+          ? (a, b) =>
+              collator.compare(categoryName(a), categoryName(b)) ||
+              collator.compare(String(a.name), String(b.name))
+          : (a, b) => collator.compare(String(a.name), String(b.name))
+      );
+      setPrintRows(list);
+      // Um tick para o estado aplicar antes da janela de impressão abrir.
+      setTimeout(() => window.print(), 60);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  };
 
   return (
     <main className="mx-auto max-w-screen-2xl space-y-5 p-4 sm:p-8">
@@ -188,8 +289,11 @@ export default function ReportScreen() {
                 ...(start ? { startDate: `${start}T00:00:00.000Z` } : {}),
                 ...(end ? { endDate: `${end}T23:59:59.999Z` } : {}),
                 groupBy,
-                lowStock: String(lowStock),
+                lowStock: String(stockStatus === 'low'),
+                inStock: String(stockStatus === 'inStock'),
                 ...(movementType ? { type: movementType } : {}),
+                ...(search ? { search } : {}),
+                ...(categoryId ? { categoryId } : {}),
               });
             }}
           >
@@ -274,18 +378,69 @@ export default function ReportScreen() {
               </label>
             )}
             {kind === 'inventory' && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={lowStock}
-                  onChange={(event) => setLowStock(event.target.checked)}
-                />
-                Somente estoque baixo
-              </label>
+              <>
+                <label className="admin-label">
+                  Pesquisar
+                  <input
+                    className="admin-input mt-1"
+                    value={search}
+                    placeholder="Nome, SKU ou categoria"
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </label>
+                <label className="admin-label">
+                  Categoria
+                  <select
+                    className="admin-input mt-1"
+                    value={categoryId}
+                    onChange={(event) => setCategoryId(event.target.value)}
+                  >
+                    <option value="">Todas</option>
+                    {categories.map((category) => (
+                      <option key={String(category._id)} value={String(category._id)}>
+                        {String(category.name)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {/* Mesmo padrão visual do select de Categoria. */}
+                <label className="admin-label">
+                  Situação
+                  <select
+                    className="admin-input mt-1"
+                    value={stockStatus}
+                    onChange={(event) => setStockStatus(event.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    <option value="low">Estoque baixo</option>
+                    <option value="inStock">Somente com saldo</option>
+                  </select>
+                </label>
+              </>
             )}
-            <button className="admin-primary" disabled={loading}>
+            {/* mb-1.5 iguala a margem inferior das admin-label: com
+                items-end o botão alinhava com a margem da label e ficava
+                alguns pixels abaixo dos inputs. */}
+            <button className="admin-primary mb-1.5" disabled={loading}>
               {loading ? 'Carregando...' : 'Gerar relatório'}
             </button>
+            {/* Impressão da posição de estoque — habilita só depois de
+                gerar o relatório com dados na tela. */}
+            {kind === 'inventory' && (
+              <button
+                type="button"
+                className="admin-secondary mb-1.5"
+                disabled={
+                  loading ||
+                  appliedKind !== 'inventory' ||
+                  !searched ||
+                  !rows.length
+                }
+                onClick={() => setPrintModal(true)}
+              >
+                Imprimir relatório
+              </button>
+            )}
           </form>
           {/* No fluxo de caixa os cards de resumo são redundantes: a
               tabela já traz os mesmos valores linha a linha. */}
@@ -341,8 +496,130 @@ export default function ReportScreen() {
               Exibindo até 100 produtos mais vendidos no período.
             </p>
           )}
+          {printModal && (
+            <Modal
+              title="Imprimir posição de estoque"
+              onClose={() => setPrintModal(false)}
+            >
+              <p className="mb-4 text-sm text-slate-600">
+                Deseja incluir os preços e custos dos produtos na impressão?
+                Sem eles, a tabela sai com uma coluna de observação para
+                anotações durante a conferência do estoque.
+              </p>
+              <fieldset className="mb-5">
+                <legend className="mb-2 text-sm font-medium text-slate-700">
+                  Ordenação da impressão
+                </legend>
+                <div className="space-y-1.5">
+                  {(
+                    [
+                      ['alpha', 'Ordem alfabética (nome do produto)'],
+                      ['category', 'Por categoria (ordem alfabética)'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 text-sm text-slate-700"
+                    >
+                      <input
+                        type="radio"
+                        name="printOrder"
+                        checked={printOrder === value}
+                        onChange={() => setPrintOrder(value)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="admin-secondary"
+                  onClick={() => void handlePrint(false)}
+                >
+                  Imprimir sem custos
+                </button>
+                <button
+                  type="button"
+                  className="admin-primary"
+                  onClick={() => void handlePrint(true)}
+                >
+                  Imprimir com custos
+                </button>
+              </div>
+            </Modal>
+          )}
         </>
       )}
+      {/* Área só de impressão: a posição vai sem paginação e, quando
+          optado, sem custos/preços — no lugar fica a coluna de
+          observação para a conferência manual do estoque. */}
+      {printRows &&
+        createPortal(
+          <div className="print-area print-doc">
+            <div>
+            <h1 className="text-lg font-bold">Posição de estoque</h1>
+            <p className="mb-4 text-xs text-slate-600">
+              Gerado em {new Date().toLocaleString('pt-BR')} ·{' '}
+              {printRows.length} produto(s) ·{' '}
+              {printOrder === 'category'
+                ? 'ordenado por categoria'
+                : 'ordem alfabética'}{' '}
+              · {printCosts ? 'com preços e custos' : 'para conferência'}
+            </p>
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr>
+                  {[
+                    'Produto',
+                    ...(printOrder === 'category' ? ['Categoria'] : []),
+                    'Qtd.',
+                    ...(printCosts ? ['Preço', 'Custo'] : ['Observação']),
+                  ].map((head) => (
+                    <th
+                      key={head}
+                      className="border-b border-black pb-1 text-left text-xs uppercase"
+                    >
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {printRows.map((row, index) => (
+                  <tr key={String(row._id || index)}>
+                    <td className="border-b border-slate-300 py-1.5 pr-2">
+                      {display(row.name, 'name')}
+                    </td>
+                    {printOrder === 'category' && (
+                      <td className="border-b border-slate-300 py-1.5 pr-2">
+                        {String((row.categoryId as Row)?.name || '—')}
+                      </td>
+                    )}
+                    <td className="border-b border-slate-300 py-1.5 pr-2">
+                      {display(row.quantityInStock, 'quantityInStock')}
+                    </td>
+                    {printCosts ? (
+                      <>
+                        <td className="border-b border-slate-300 py-1.5">
+                          {display(row.price, 'price')}
+                        </td>
+                        <td className="border-b border-slate-300 py-1.5">
+                          {display(row.costPrice, 'costPrice')}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="border-b border-slate-300 py-1.5" />
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </div>,
+          document.body
+        )}
     </main>
   );
 }

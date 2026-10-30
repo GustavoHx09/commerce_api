@@ -87,6 +87,16 @@ export const getTopProducts = (tenantId, startDate, endDate, limit) => {
         },
         { $sort: { quantity: -1, revenue: -1 } },
         { $limit: limit },
+        // Busca o custo atual do produto para comparar com o preço médio
+        // de venda (o item da venda não snapshot do custo).
+        {
+            $lookup: {
+                from: "products",
+                localField: "_id.productId",
+                foreignField: "_id",
+                as: "product",
+            },
+        },
         {
             $project: {
                 _id: 0,
@@ -95,6 +105,7 @@ export const getTopProducts = (tenantId, startDate, endDate, limit) => {
                 name: "$_id.name",
                 quantity: 1,
                 revenue: 1,
+                costPrice: { $first: "$product.costPrice" },
             },
         },
     ]);
@@ -111,10 +122,10 @@ export const getInventoryReport = (filter, skip, limit, sort) => {
         .limit(limit);
 };
 
-// Retorna os totais do estoque: quantidade de produtos, valor de custo, venda e abaixo do mínimo.
-export const getInventorySummary = async (tenantId, lowStockOnly) => {
-    const match = { ...baseQuery(tenantId, false) };
-    if (lowStockOnly) match.$expr = { $lte: ["$quantityInStock", "$minStock"] };
+// Retorna os totais do estoque: quantidade de produtos, valor de custo, venda
+// e abaixo do mínimo — respeitando o mesmo filtro da listagem do relatório.
+export const getInventorySummary = async (filter) => {
+    const match = { ...filter };
 
     const [result] = await products.aggregate([
         { $match: match },

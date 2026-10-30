@@ -11,7 +11,8 @@ import {
 } from "./reportRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isEmpty, isValidDate } from "../../shared/utils/fieldsValidations.js";
-import { throwValidationError } from "../../shared/utils/serviceHelpers.js";
+import { throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
+import { getCategoryIdsByNameRepo } from "../category/categoryRepo.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
 
 const VALID_GROUP_BY = ["day", "month", "year", "none"];
@@ -71,17 +72,38 @@ export const getTopProductsReportService = async (query, tenantId) => {
 };
 
 // Relatório de posição de estoque com resumo e lista paginada.
+// Aceita busca por nome/SKU/categoria, categoria específica e estoque baixo;
+// o resumo (cards) respeita os mesmos filtros da tabela.
 export const getInventoryReportService = async (query, tenantId) => {
     const { page, limit, skip } = getPagination(query);
     const sort = getSort(query, "name");
     const lowStock = query.lowStock === "true";
+    const inStock = query.inStock === "true";
 
     const filter = { ...baseQuery(tenantId, false) };
     if (lowStock) filter.$expr = { $lte: ["$quantityInStock", "$minStock"] };
+    // "Somente com saldo" limita a posição a produtos com estoque acima de
+    // zero — útil na conferência/impressão do estoque disponível.
+    if (inStock) filter.quantityInStock = { $gt: 0 };
+
+    if (!isEmpty(query.categoryId)) filter.categoryId = query.categoryId;
+
+    if (query.search) {
+        const term = query.search.trim();
+        // Mesmo padrão da listagem de produtos: nome, descrição, SKU e
+        // produtos cuja categoria corresponde ao termo.
+        const matchingCategories = await getCategoryIdsByNameRepo(tenantId, accentInsensitiveRegex(term));
+        filter.$or = [
+            { name: { $regex: accentInsensitiveRegex(term), $options: "i" } },
+            { description: { $regex: accentInsensitiveRegex(term), $options: "i" } },
+            { sku: { $regex: term, $options: "i" } },
+            { categoryId: { $in: matchingCategories } },
+        ];
+    }
 
     const [products, summary] = await Promise.all([
         getInventoryReport(filter, skip, limit, sort),
-        getInventorySummary(tenantId, lowStock),
+        getInventorySummary(filter),
     ]);
 
     return {
@@ -124,20 +146,24 @@ const getCashFlowGroupBy = (value) => {
 };
 
 // Calcula os totais de um período a partir dos valores parciais.
-// inflow/outflow refletem o dinheiro físico do caixa: vendas em dinheiro,
-// contas liquidadas via caixa, reforços e sangrias/estornos.
+// inflow/outflow refletem o dinheiro físico do caixa: vendas em dinheiro
+// líquidas (vendas menos estornos), contas liquidadas via caixa e reforços.
 const buildCashFlowTotals = (values) => {
     const sales = values.sales || 0;
-    const cashSales = values.cashSales || 0;
     const billsReceive = values.billsReceive || 0;
     const billsPay = values.billsPay || 0;
     const billsReceiveCashier = values.billsReceiveCashier || 0;
     const billsPayCashier = values.billsPayCashier || 0;
     const suprimentos = values.suprimentos || 0;
     const sangrias = values.sangrias || 0;
+    // "Estornos" fica como coluna informativa: soma todas as vendas canceladas.
     const estornos = values.estornos || 0;
+    // "Vendas em dinheiro" conta só o dinheiro efetivo: uma venda estornada
+    // devolve o valor ao cliente, então sai da soma das entradas (o estorno
+    // não entra também em "Saídas", senão seria descontado em dobro).
+    const cashSales = (values.cashSales || 0) - estornos;
     const inflow = cashSales + billsReceiveCashier + suprimentos;
-    const outflow = sangrias + estornos + billsPayCashier;
+    const outflow = sangrias + billsPayCashier;
     const balance = inflow - outflow;
 
     return { sales, cashSales, billsReceive, billsPay, suprimentos, sangrias, estornos, inflow, outflow, balance };
