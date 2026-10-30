@@ -375,7 +375,7 @@ export const screens: Record<string, Screen> = {
       ['entityType', 'Entidade'],
       ['action', 'Operação'],
       ['actorId', 'Responsável'],
-      ['entityName', 'Registro'],
+      ['entityName', 'Observação'],
     ],
     filters: [
       { key: 'entityType', label: 'Entidade' },
@@ -388,6 +388,15 @@ export const screens: Record<string, Screen> = {
           ['delete', 'Exclusão'],
           ['restore', 'Restauração'],
         ],
+      },
+      // Escopo "somente manuais": o backend esconde os registros gerados
+      // pelo fluxo de venda (criação da venda e artefatos de itens);
+      // cancelamentos de venda e cadastros continuam aparecendo.
+      {
+        key: 'manualOnly',
+        label: 'Escopo',
+        emptyLabel: 'Todas as operações',
+        options: [['true', 'Somente manuais']],
       },
     ],
   },
@@ -564,6 +573,7 @@ export function display(value: unknown, key = ''): string {
       'price',
       'costPrice',
       'revenue',
+      'avgPrice',
       'unitPrice',
       'total',
       'amount',

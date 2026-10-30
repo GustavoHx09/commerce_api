@@ -104,6 +104,16 @@ describe('orderService', () => {
             expect(mockCreatePaymentService).toHaveBeenCalled();
             expect(mockCreateOrderRepo).toHaveBeenCalled();
             expect(mockAuditAction).toHaveBeenCalled();
+            // A baixa de estoque da venda audita o produto com o saldo
+            // anterior reconstruído (10 → 8).
+            expect(mockAuditAction).toHaveBeenCalledWith(
+                'product',
+                'update',
+                expect.objectContaining({ quantityInStock: 10 }),
+                expect.objectContaining({ _id: 'p1', quantityInStock: 8 }),
+                'u1',
+                { session: {} }
+            );
         });
 
         it('creates an order with combined payments and credit interest', async () => {
@@ -255,6 +265,16 @@ describe('orderService', () => {
             expect(mockCreateStockMovementRepo).toHaveBeenCalledWith(expect.objectContaining({ type: 'in', quantity: 2, previousQuantity: 8, newQuantity: 10 }), { session: {} });
             expect(mockCancelPaymentsByOrderService).toHaveBeenCalledWith('o1', 'tenantA', 'u1', { session: {} });
             expect(mockAuditAction).toHaveBeenCalled();
+            // A devolução de estoque do cancelamento também audita o produto
+            // (8 → 10).
+            expect(mockAuditAction).toHaveBeenCalledWith(
+                'product',
+                'update',
+                expect.objectContaining({ quantityInStock: 8 }),
+                expect.objectContaining({ _id: 'p1', quantityInStock: 10 }),
+                'u1',
+                { session: {} }
+            );
         });
 
         it('cancels order even if product was hard deleted (skips restore)', async () => {

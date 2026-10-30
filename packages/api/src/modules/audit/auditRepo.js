@@ -8,13 +8,23 @@ export const createAuditLogRepo = async (data, { session } = {}) => {
 };
 
 // Monta o filtro de consulta de auditoria, opcionalmente por entidade, tenant e ação.
-const buildFilter = ({ entityType, entityId, tenantId, action }) => {
+const buildFilter = ({ entityType, entityId, tenantId, action, manualOnly }) => {
     const filter = {};
 
     if (entityType) filter.entityType = entityType;
     if (entityId) filter.entityId = entityId;
     if (tenantId) filter.tenantId = tenantId;
     if (action) filter.action = action;
+
+    // Escopo "somente manuais": esconde registros gerados pelo fluxo de
+    // venda (a criação da venda e os artefatos de itens). Cancelamentos de
+    // venda (update em order) e cadastros/movimentações continuam visíveis.
+    if (["true", "1"].includes(String(manualOnly))) {
+        filter.$nor = [
+            { entityType: "order", action: "create" },
+            { entityType: "orderItem" },
+        ];
+    }
 
     return filter;
 };

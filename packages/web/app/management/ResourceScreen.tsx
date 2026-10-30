@@ -1,13 +1,24 @@
 'use client';
 
-import { startTransition, useCallback, useEffect, useState } from 'react';
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useWorkspaceApi } from '../AdminShell';
 import { useAuth } from '../context/AuthContext';
 import UserPermissionsEditor from '../permissions/components/UserPermissionsEditor';
 import type { PanelUser, PermissionPreset } from '../permissions/types';
-import { hasPermission } from '@/lib/permissions';
+import {
+  ACTION_LABELS,
+  groupPermissionsByResource,
+  hasPermission,
+  RESOURCE_LABELS,
+} from '@/lib/permissions';
 import {
   display,
   formatAddress,
@@ -90,6 +101,7 @@ const detailLabels: Record<string, string> = {
   action: 'Operação',
   actorId: 'Responsável',
   entityId: 'Registro',
+  entityName: 'Observação',
   entityType: 'Entidade',
   changes: 'Alterações',
   snapshot: 'Estado registrado',
@@ -110,6 +122,9 @@ const detailLabels: Record<string, string> = {
   externalMethod: 'Forma externa',
   orderId: 'Venda vinculada',
   billId: 'Conta vinculada',
+  permissions: 'Permissões',
+  grantedPermissions: 'Permissões concedidas',
+  revokedPermissions: 'Permissões revogadas',
 };
 // Estilo padrão dos botões de ação da tabela: "pill" discreta com foco/hover
 // visível, para distinguir ações (vermelho = destrutivo).
@@ -137,6 +152,38 @@ const canReverseBill = (row: Row, role?: string) =>
   ['admin', 'master'].includes(role || '') ||
   Date.now() - new Date(String(row.paidAt)).getTime() <= 30 * 60 * 1000;
 
+// Recurso de permissão correspondente ao endpoint da tela — espelha o
+// authorize(...) das rotas da API.
+const PERM_BY_ENDPOINT: Record<string, string> = {
+  '/products': 'products',
+  '/categories': 'categories',
+  '/customers': 'customers',
+  '/suppliers': 'suppliers',
+  '/users': 'users',
+  '/orders': 'orders',
+  '/cashiers': 'cashier',
+  '/bills': 'bills',
+  '/audit': 'audit',
+};
+
+// Ação da tela → permissão exigida. O cancelamento de venda usa
+// orders:delete na API; suprimento/retirada/acerto usam as permissões
+// dedicadas de estoque; o restante segue o :write/:delete do recurso.
+const actionPerm = (endpoint: string, name: string): string | null => {
+  const res = PERM_BY_ENDPOINT[endpoint];
+  if (name === 'cancel')
+    return endpoint === '/orders'
+      ? 'orders:delete'
+      : res
+        ? `${res}:write`
+        : null;
+  if (name === 'supply' || name === 'withdraw' || name === 'stockMovement')
+    return 'stock:supply';
+  if (name === 'adjust') return 'stock:adjust';
+  if (name === 'delete') return res ? `${res}:delete` : null;
+  return res ? `${res}:write` : null;
+};
+
 // Tipos de movimentação que entram dinheiro no caixa — espelha
 // INFLOW_TYPES do backend (cashierService.js).
 const isCashierInflow = (type: string) =>
@@ -162,7 +209,36 @@ const hiddenFields = new Set([
   'permissions',
   'revokedPermissions',
   'snapshot',
+  // Na auditoria o registro legível vem em entityName — o id bruto não agrega.
+  'entityId',
 ]);
+
+// Campos da auditoria que guardam listas de permissões do catálogo
+// ("recurso:acao") — exibidos traduzidos, nunca como código cru.
+const permissionFields = new Set([
+  'permissions',
+  'grantedPermissions',
+  'revokedPermissions',
+]);
+
+// Rótulos dos tipos de movimentação de estoque exibidos na auditoria de
+// produtos — espelha o enum `type` do stockMovementModel do backend.
+const stockMovementLabels: Record<string, string> = {
+  in: 'Suprimento',
+  out: 'Retirada',
+  adjust: 'Acerto de estoque',
+};
+
+// Traduz uma permissão do catálogo ("recurso:acao") para um rótulo legível
+// ("Recurso: Ação"), na mesma nomenclatura da grade de permissões do painel.
+const permissionLabel = (permission: unknown): string => {
+  if (permission === '*') return 'Todas as permissões';
+  if (typeof permission !== 'string') return display(permission);
+  const [resource, action] = permission.split(':');
+  const resourceLabel = RESOURCE_LABELS[resource] || resource;
+  const actionLabel = ACTION_LABELS[action] || action;
+  return action ? `${resourceLabel}: ${actionLabel}` : resourceLabel;
+};
 
 // Detalhes de uma venda no estilo de um cupom: cabeçalho com os dados da
 // venda, tabela de itens com "Total dos itens", observação do pedido embaixo
@@ -255,6 +331,426 @@ function OrderDetails({ row }: { row: Row }) {
 
       {/* Pagamentos são exibidos pela tabela relacionada do modal
           (forma, parcelas e valor) — a parte "financeiro" do cupom. */}
+    </div>
+  );
+}
+
+// Detalhes de auditoria no mesmo padrão visual das demais telas: cabeçalho
+// em cards (entidade, operação, responsável, registro e data) e uma tabela
+// comparativa — "Dados anteriores" × "Dados novos" por campo. Em criações a
+// coluna anterior fica vazia; em exclusões, a coluna nova. Listas de
+// permissões viram cards agrupados por tópico (ex.: "Dashboard" → selo
+// "Leitura"), destacando em verde o que entrou e em vermelho o que saiu.
+function AuditDetails({ row }: { row: Row }) {
+  const changes = (row.changes || {}) as Row;
+  // Updates trazem {from,to} por campo; create/delete trazem o documento.
+  const isDiff = Object.values(changes).some(
+    (value) =>
+      value &&
+      typeof value === 'object' &&
+      'from' in (value as Row) &&
+      'to' in (value as Row)
+  );
+  // Fechamento de caixa: closedBy e finalAmount saem das linhas e viram
+  // colunas dedicadas (contexto do fechamento), ancoradas na linha da
+  // Situação — o valor exibido é o lado "novo" do diff.
+  const cashierClose = Boolean(
+    row.entityType === 'cashier' &&
+      changes.closedBy &&
+      typeof changes.closedBy === 'object' &&
+      'to' in (changes.closedBy as Row)
+  );
+  // Abertura de caixa (criação): mesmo formato do fechamento — openedBy e
+  // initialAmount viram colunas de contexto na linha da Situação.
+  const cashierOpen =
+    row.entityType === 'cashier' &&
+    row.action === 'create' &&
+    'openedBy' in changes;
+  // Campos que não agregam no detalhe da auditoria: ativo, timestamps
+  // técnicos e datas de abertura/fechamento (a data está no cabeçalho),
+  // createdBy (o responsável já aparece no cabeçalho) e openedBy em
+  // alterações — no fechamento ele aparece só como artefato de
+  // serialização; o que interessa é o "Fechado por". Permissões são
+  // exceção ao hiddenFields: é a alteração central dos presets.
+  const entries = Object.entries(changes).filter(
+    ([key]) =>
+      (!hiddenFields.has(key) ||
+        ['permissions', 'grantedPermissions', 'revokedPermissions'].includes(
+          key
+        )) &&
+      ![
+        'isActive',
+        'updatedAt',
+        'createdAt',
+        'createdBy',
+        'openedAt',
+        'closedAt',
+      ].includes(key) &&
+      !(isDiff && key === 'openedBy') &&
+      // Em fechamento de caixa os dois campos viram colunas próprias.
+      !(cashierClose && ['closedBy', 'finalAmount'].includes(key)) &&
+      // Na abertura, openedBy e initialAmount viram colunas; o número do
+      // caixa já aparece no cabeçalho ("Caixa #N") em qualquer log de caixa.
+      !(cashierOpen && ['openedBy', 'initialAmount'].includes(key)) &&
+      !(row.entityType === 'cashier' && key === 'cashierNumber')
+  );
+  // Referências internas (ids de vínculo) viram "—": o registro legível já
+  // aparece no cabeçalho; ids crus não agregam.
+  const auditValue = (value: unknown, key: string) => {
+    if (typeof value === 'string' && /^[0-9a-f]{24}$/i.test(value)) return '—';
+    if (value && typeof value === 'object') {
+      // Listas (permissões, itens) viram texto separado por vírgula.
+      if (Array.isArray(value))
+        return value.map((item) => display(item, key)).join(', ') || '—';
+      const obj = value as Row;
+      // Snapshot populado pelo backend traz { name } — exibe o nome.
+      if (typeof obj.name === 'string' && obj.name) return obj.name;
+      // Endereços viram uma linha legível com todos os campos preenchidos —
+      // complemento e CEP inclusos para não esconder mudanças sutis (ex.:
+      // alterar só o complemento). O JSON cru não agrega.
+      if (key === 'address' || 'street' in obj || 'zipCode' in obj) {
+        const text = [
+          obj.street,
+          obj.number,
+          obj.complement,
+          obj.neighborhood,
+          obj.city && obj.state
+            ? `${obj.city}/${obj.state}`
+            : obj.city || obj.state,
+          obj.zipCode ? `CEP ${display(obj.zipCode, 'zipCode')}` : null,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        return text || '—';
+      }
+      // ObjectId serializado cru pelo BSON (logs antigos) — não agrega.
+      if ('i0' in obj) return '—';
+      return JSON.stringify(value);
+    }
+    return display(value, key);
+  };
+  // Listas de permissões viram cards agrupados por recurso (tópico), com as
+  // ações como selos — mesma organização da grade de permissões do painel.
+  // Na comparação anterior × novo, o selo fica verde quando a permissão
+  // entrou e vermelho quando saiu; sem comparação, todos ficam neutros.
+  const renderPermissions = (
+    value: unknown,
+    side: 'from' | 'to',
+    otherSide: unknown
+  ): ReactNode => {
+    const items = Array.isArray(value) ? value : [];
+    if (!items.length) return <span className="text-slate-400">—</span>;
+    // Acesso total ("*") dispensa agrupamento.
+    if (items.includes('*'))
+      return (
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+          Todas as permissões
+        </span>
+      );
+    const other = new Set(Array.isArray(otherSide) ? otherSide : []);
+    const groups = groupPermissionsByResource(
+      items.filter((item): item is string => typeof item === 'string')
+    );
+    // Itens fora do padrão "recurso:acao" (não esperado) viram texto simples.
+    if (!groups.length)
+      return <span>{items.map(permissionLabel).join(', ')}</span>;
+    return (
+      <ul className="flex flex-wrap items-start gap-2">
+        {groups.map((group) => (
+          <li
+            key={group.resource}
+            className="rounded-md border border-slate-200 bg-white p-2"
+          >
+            <p className="mb-1 text-[11px] font-semibold uppercase text-slate-500">
+              {group.label}
+            </p>
+            <ul className="flex flex-wrap gap-1">
+              {group.permissions.map((permission) => {
+                // Selo verde = permissão adicionada; vermelho = removida.
+                const changed = !other.has(permission);
+                const tone = changed
+                  ? side === 'to'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-700'
+                  : 'bg-slate-100 text-slate-700';
+                const action = permission.split(':')[1];
+                return (
+                  <li
+                    key={permission}
+                    className={`rounded px-2 py-0.5 text-xs ${tone}`}
+                  >
+                    {ACTION_LABELS[action] || permissionLabel(permission)}
+                  </li>
+                );
+              })}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+  // Pagamentos da venda: cada item resolvido pelo backend
+  // ({ method, amount, installments }) vira um selo com a forma, as
+  // parcelas (quando >1x) e o valor — ex.: "Dinheiro · R$ 249,00".
+  const renderPayments = (value: unknown): ReactNode => {
+    const items = Array.isArray(value) ? value : [];
+    if (!items.length) return <span className="text-slate-400">—</span>;
+    return (
+      <ul className="flex flex-wrap gap-1">
+        {items.map((item, index) => {
+          const payment = (item || {}) as Row;
+          const label =
+            typeof payment.method === 'string' && payment.method
+              ? [
+                  display(payment.method, 'method'),
+                  Number(payment.installments) > 1
+                    ? `${payment.installments}x`
+                    : null,
+                  payment.amount != null
+                    ? display(payment.amount, 'amount')
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : '—';
+          return (
+            <li
+              key={index}
+              className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+            >
+              {label}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+  // Pagamentos e permissões têm renderização própria em selos; os demais
+  // campos seguem o texto simples de auditValue.
+  const renderValue = (
+    value: unknown,
+    key: string,
+    side: 'from' | 'to',
+    otherSide: unknown
+  ): ReactNode =>
+    key === 'paymentIds'
+      ? renderPayments(value)
+      : permissionFields.has(key)
+        ? renderPermissions(value, side, otherSide)
+        : auditValue(value, key);
+  // Contexto da movimentação de estoque anexado pelo backend a logs de
+  // produto. Vendas e cancelamentos são reconhecidos pela referência
+  // "Venda #N" gravada na movimentação.
+  const stockContext = (row.stockContext || null) as Row | null;
+  const isSaleMovement = /^venda\s*#/i.test(
+    String(stockContext?.reference || '')
+  );
+  const movementTypeLabel = !stockContext
+    ? ''
+    : isSaleMovement
+      ? stockContext.type === 'in'
+        ? 'Cancelamento de venda'
+        : 'Venda'
+      : stockMovementLabels[String(stockContext.type)] ||
+        String(stockContext.type);
+  const movementReason = !stockContext
+    ? ''
+    : isSaleMovement
+      ? String(stockContext.reference)
+      : [stockContext.reason, stockContext.reference]
+          .filter(Boolean)
+          .join(' — ') || '—';
+  const headCell =
+    'px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500';
+  const cell = 'px-3 py-2 text-sm';
+
+  return (
+    <div className="space-y-5">
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {[
+          ['Entidade', display(row.entityType, 'entityType')],
+          ['Operação', display(row.action, 'action')],
+          [
+            'Responsável',
+            display(
+              (row.actorId as Row)?.name ??
+                (row.actorId as Row)?.email ??
+                row.actorId
+            ),
+          ],
+          [
+            // O nome exibido é o do registro alterado — rotulado conforme
+            // a entidade (preset de permissões, conta, caixa...).
+            row.entityType === 'permissionPreset'
+              ? 'Predefinição alterada'
+              : 'Observação',
+            display(row.entityName),
+          ],
+          ['Data', display(row.createdAt, 'createdAt')],
+        ].map(([label, value]) => (
+          <div key={String(label)} className={detailBoxClass}>
+            <dt className={detailLabelClass}>{label}</dt>
+            <dd className={detailValueClass}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {entries.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="font-semibold text-slate-900">
+            {isDiff ? 'Alterações' : 'Dados registrados'}
+          </h3>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className={headCell}>Campo</th>
+                  {/* Tipo/Motivo da movimentação só existem em logs de
+                      produto com diff de estoque (stockContext). */}
+                  {!!stockContext && (
+                    <>
+                      <th className={headCell}>Tipo</th>
+                      <th className={headCell}>Motivo</th>
+                    </>
+                  )}
+                  {/* Sem diff não existe comparação: criação mostra só os
+                      dados novos e exclusão só os anteriores. */}
+                  {isDiff ? (
+                    <>
+                      <th className={headCell}>Dados anteriores</th>
+                      <th className={headCell}>Dados novos</th>
+                    </>
+                  ) : (
+                    <th className={headCell}>
+                      {row.action === 'delete'
+                        ? 'Dados anteriores'
+                        : 'Dados novos'}
+                    </th>
+                  )}
+                  {/* Fechado por/Valor final só existem em fechamento de
+                      caixa; Aberto por/Valor inicial, na abertura. */}
+                  {cashierClose && (
+                    <>
+                      <th className={headCell}>Fechado por</th>
+                      <th className={headCell}>Valor final</th>
+                    </>
+                  )}
+                  {cashierOpen && (
+                    <>
+                      <th className={headCell}>Aberto por</th>
+                      <th className={headCell}>Valor inicial</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {entries.map(([key, value]) => {
+                  // Em updates/restores o campo é um diff {from,to}; em
+                  // criação o valor entra como "novo" e em exclusão como
+                  // "anterior".
+                  const isChange =
+                    value &&
+                    typeof value === 'object' &&
+                    'to' in (value as Row);
+                  const from = isChange
+                    ? (value as Row).from
+                    : row.action === 'delete'
+                      ? value
+                      : undefined;
+                  const to = isChange
+                    ? (value as Row).to
+                    : row.action === 'delete'
+                      ? undefined
+                      : value;
+                  return (
+                    <tr key={key}>
+                      <td className={`${cell} font-medium align-top`}>
+                        {detailLabels[key] || key}
+                      </td>
+                      {/* A movimentação registrada explica o diff do campo
+                          quantityInStock — demais campos ficam sem contexto. */}
+                      {!!stockContext && (
+                        <>
+                          <td className={`${cell} align-top`}>
+                            {key === 'quantityInStock'
+                              ? movementTypeLabel
+                              : '—'}
+                          </td>
+                          <td className={`${cell} align-top`}>
+                            {key === 'quantityInStock'
+                              ? movementReason
+                              : '—'}
+                          </td>
+                        </>
+                      )}
+                      {isDiff ? (
+                        <>
+                          <td className={`${cell} align-top`}>
+                            {renderValue(from, key, 'from', to)}
+                          </td>
+                          <td className={`${cell} align-top`}>
+                            {renderValue(to, key, 'to', from)}
+                          </td>
+                        </>
+                      ) : (
+                        <td className={`${cell} align-top`}>
+                          {renderValue(
+                            value,
+                            key,
+                            row.action === 'delete' ? 'from' : 'to',
+                            undefined
+                          )}
+                        </td>
+                      )}
+                      {/* Quem fechou e o valor final aparecem na linha da
+                          Situação — são o contexto do fechamento. */}
+                      {cashierClose && (
+                        <>
+                          <td className={`${cell} align-top`}>
+                            {key === 'status'
+                              ? auditValue(
+                                  (changes.closedBy as Row)?.to,
+                                  'closedBy'
+                                )
+                              : '—'}
+                          </td>
+                          <td className={`${cell} align-top`}>
+                            {key === 'status'
+                              ? auditValue(
+                                  (changes.finalAmount as Row)?.to,
+                                  'finalAmount'
+                                )
+                              : '—'}
+                          </td>
+                        </>
+                      )}
+                      {/* Na abertura, quem abriu e o valor inicial também
+                          aparecem na linha da Situação. */}
+                      {cashierOpen && (
+                        <>
+                          <td className={`${cell} align-top`}>
+                            {key === 'status'
+                              ? auditValue(changes.openedBy, 'openedBy')
+                              : '—'}
+                          </td>
+                          <td className={`${cell} align-top`}>
+                            {key === 'status'
+                              ? auditValue(
+                                  changes.initialAmount,
+                                  'initialAmount'
+                                )
+                              : '—'}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1071,7 +1567,16 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
         ? [{ key: 'cancelReason', label: 'Motivo do cancelamento' }]
         : [];
   // Caixas não têm edição de cadastro: só ações operacionais.
-  const canEdit = Boolean(screen.fields) && screen.endpoint !== '/cashiers';
+  // Visibilidade por permissão: o usuário vê a tela (read) mas os botões
+  // de escrita só aparecem se a permissão efetiva permitir — a API segue
+  // bloqueando qualquer chamada forçada sem permissão.
+  const permRes = PERM_BY_ENDPOINT[screen.endpoint];
+  const can = (perm: string | null) =>
+    !perm || user?.role === 'master' || hasPermission(user?.permissions, perm);
+  const canEdit =
+    Boolean(screen.fields) &&
+    screen.endpoint !== '/cashiers' &&
+    can(permRes ? `${permRes}:write` : null);
 
   // Abre o formulário de cadastro. Para caixas, busca o valor de fechamento
   // do caixa anterior para preencher o valor inicial travado.
@@ -1104,7 +1609,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
     <main className="mx-auto max-w-screen-2xl p-4 sm:p-8">
       <PageHeading title={screen.title} description={screen.description}>
         <div className="flex gap-2">
-          {screen.endpoint === '/orders' && (
+          {screen.endpoint === '/orders' && can('orders:write') && (
             <Link href="/management/pos" className="admin-primary">
               Nova venda
             </Link>
@@ -1141,7 +1646,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           {/* Em Funcionários, "Permissões" leva às predefinições —
               mesmo padrão do botão "Gerenciar categorias" em Estoque. */}
           {screen.endpoint === '/users' &&
-            ['admin', 'master'].includes(user?.role || '') && (
+            can('permissionPresets:read') && (
               <Link href="/management/presets" className="admin-secondary">
                 Permissões
               </Link>
@@ -1153,7 +1658,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           )}
           {/* Em Caixas o "Abrir caixa" mora dentro do card "Caixa do dia"
               (e só aparece quando não há caixa aberto). */}
-          {screen.fields && !isCashiers && (
+          {screen.fields && !isCashiers && can(permRes ? `${permRes}:write` : null) && (
             <button
               disabled={!tenantId}
               className="admin-primary"
@@ -1301,23 +1806,26 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                         >
                           Detalhes
                         </button>
-                        <button
-                          className="admin-secondary"
-                          onClick={() =>
-                            setAction({
-                              row: openCashier,
-                              name: 'movement',
-                              title: 'Sangria / reforço',
-                            })
-                          }
-                        >
-                          Sangria / reforço
-                        </button>
+                        {can('cashier:write') && (
+                          <button
+                            className="admin-secondary"
+                            onClick={() =>
+                              setAction({
+                                row: openCashier,
+                                name: 'movement',
+                                title: 'Sangria / reforço',
+                              })
+                            }
+                          >
+                            Sangria / reforço
+                          </button>
+                        )}
                         {/* Regra do backend: só quem abriu o caixa pode fechá-lo,
                             então o botão some quando o caixa é de outro operador. */}
-                        {(typeof openCashier.openedBy === 'object'
-                          ? (openCashier.openedBy as Row)?._id
-                          : openCashier.openedBy) === user?.id && (
+                        {can('cashier:write') &&
+                          (typeof openCashier.openedBy === 'object'
+                            ? (openCashier.openedBy as Row)?._id
+                            : openCashier.openedBy) === user?.id && (
                           <button
                             className={dangerButtonClass}
                             onClick={() =>
@@ -1334,7 +1842,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                       </>
                     )}
                     {/* Sem caixa aberto, a abertura acontece aqui no card. */}
-                    {!openCashier && (
+                    {!openCashier && can('cashier:write') && (
                       <button
                         className="admin-primary"
                         disabled={!tenantId}
@@ -1509,10 +2017,16 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
 
 
                     {screen.actions
+                      // Primeiro corta o que o usuário não tem permissão
+                      // de executar; depois aplicam-se as regras de estado.
                       ?.filter(([name]) =>
+                        can(actionPerm(screen.endpoint, name))
+                      )
+                      .filter(([name]) =>
+                        // Vendas: "Cancelar venda" fica dentro dos detalhes —
+                        // a linha mostra só "Detalhes".
                         screen.endpoint === '/orders'
-                          ? row.status === 'paid' &&
-                            (name !== 'cancel' || canCancelOrder(row, user?.role))
+                          ? false
                           : screen.endpoint === '/cashiers'
                             ? row.status === 'open' &&
                               (name === 'close' ||
@@ -1621,7 +2135,31 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
           onClose={() => setDetails(null)}
         >
           {screen.endpoint === '/orders' ? (
-            <OrderDetails row={details} />
+            <>
+              <OrderDetails row={details} />
+              {/* Cancelamento fica junto do registro da venda, não na linha
+                  da listagem — mesma regra de janela usada no botão antigo. */}
+              {details.status === 'paid' &&
+                canCancelOrder(details, user?.role) &&
+                can('orders:delete') && (
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      className={dangerButtonClass}
+                      onClick={() =>
+                        setAction({
+                          row: details,
+                          name: 'cancel',
+                          title: 'Cancelar venda',
+                        })
+                      }
+                    >
+                      Cancelar venda
+                    </button>
+                  </div>
+                )}
+            </>
+          ) : screen.endpoint === '/audit' ? (
+            <AuditDetails row={details} />
           ) : screen.endpoint === '/cashiers' ? (
             <CashierDetails row={details} />
           ) : screen.fields ? (
@@ -1668,7 +2206,8 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                   </>
                 ) : screen.endpoint === '/users' &&
                   details.role !== 'master' &&
-                  ['admin', 'master'].includes(user?.role || '') ? (
+                  ['admin', 'master'].includes(user?.role || '') &&
+                  can('users:write') ? (
                   // Gerencia as permissões individuais do funcionário:
                   // preset, extras e revogações.
                   <button
@@ -1677,7 +2216,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                   >
                     Permissões
                   </button>
-                ) : screen.endpoint === '/bills' ? (
+                ) : screen.endpoint === '/bills' && can('bills:write') ? (
                   // Conta pendente: baixar ou cancelar. Conta liquidada:
                   // apenas estornar (devolve ao caixa e volta a pendente).
                   <>

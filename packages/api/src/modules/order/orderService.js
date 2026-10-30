@@ -19,7 +19,7 @@ import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 import { isEmpty } from "../../shared/utils/fieldsValidations.js";
 import { throwValidationError, accentInsensitiveRegex } from "../../shared/utils/serviceHelpers.js";
 import { getPagination, getSort, paginatedResponse } from "../../shared/utils/paginationHelpers.js";
-import { auditAction } from "../audit/auditHelpers.js";
+import { auditAction, toPlain } from "../audit/auditHelpers.js";
 
 // Gera um ObjectId para ser usado como _id do pedido antes de criar o pagamento.
 const generateOrderId = () => new mongoose.Types.ObjectId();
@@ -127,6 +127,18 @@ const processOrderItems = async (items, tenantId, orderId, orderNumber, actorId,
             reference: `Venda #${orderNumber}`,
             createdBy: actorId,
         }, { session });
+
+        // A baixa de estoque também altera a entidade produto — registra a
+        // auditoria dela para a consulta de auditoria mostrar de onde veio
+        // a mudança de saldo (venda vinculada via movimentação de estoque).
+        await auditAction(
+            "product",
+            "update",
+            { ...toPlain(product), quantityInStock: previousQuantity },
+            product,
+            actorId,
+            { session }
+        );
     }
 
     return processedItems;
@@ -414,6 +426,17 @@ export const cancelOrderService = async (id, data, tenantId, actorId, actorRole)
                     reference: `Venda #${previous.orderNumber || id}`,
                     createdBy: actorId,
                 }, { session });
+
+                // A devolução do estoque também altera a entidade produto —
+                // registra a auditoria dela com o saldo anterior reconstruído.
+                await auditAction(
+                    "product",
+                    "update",
+                    { ...toPlain(product), quantityInStock: previousQuantity },
+                    product,
+                    actorId,
+                    { session }
+                );
             } else {
                 // Produto não encontrado (hard delete ou inativo): registra alerta e continua o cancelamento.
                 await auditAction(
