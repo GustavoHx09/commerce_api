@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useWorkspaceApi } from '../AdminShell';
 import { useAuth } from '../context/AuthContext';
 import { display, type Row } from './config';
+import { hasPermission } from '@/lib/permissions';
 import {
   errorMessage,
   loadOptions,
@@ -51,7 +52,11 @@ export default function PresetsScreen() {
     creating: boolean;
   } | null>(null);
 
-  const canManage = user?.role === 'master' || user?.role === 'admin';
+  // Gerenciar presets exige permissionPresets:write nas permissões
+  // efetivas — master continua vendo tudo.
+  const canManage =
+    user?.role === 'master' ||
+    hasPermission(user?.permissions, 'permissionPresets:write');
 
   const load = useCallback(async () => {
     if (!tenantId) {

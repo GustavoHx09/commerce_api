@@ -1,49 +1,72 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useAuth } from './context/AuthContext';
+import { hasPermission } from '@/lib/permissions';
 
+// Quarto item de cada entrada: permissão de leitura exigida para o item
+// aparecer no menu — null significa visível para qualquer usuário logado.
 export const navigation = [
-  { title: 'Visão geral', items: [['/dashboard', 'Dashboard', 'DG']] },
+  {
+    title: 'Visão geral',
+    items: [['/dashboard', 'Dashboard', 'DG', 'dashboard:read']],
+  },
   {
     title: 'Operação',
     items: [
-      ['/management/pos', 'Frente de caixa · PDV', 'PV'],
-      ['/management/orders', 'Vendas e pedidos', 'VD'],
-      ['/management/cashiers', 'Caixas', 'CX'],
+      ['/management/pos', 'Frente de caixa · PDV', 'PV', 'orders:write'],
+      ['/management/orders', 'Vendas e pedidos', 'VD', 'orders:read'],
+      ['/management/cashiers', 'Caixas', 'CX', 'cashier:read'],
     ],
   },
   {
     title: 'Cadastros',
     items: [
-      ['/management/products', 'Estoque', 'ES'],
-      ['/management/customers', 'Clientes', 'CL'],
-      ['/management/suppliers', 'Fornecedores', 'FR'],
-      ['/management/users', 'Funcionários', 'FN'],
+      ['/management/products', 'Estoque', 'ES', 'products:read'],
+      ['/management/customers', 'Clientes', 'CL', 'customers:read'],
+      ['/management/suppliers', 'Fornecedores', 'FR', 'suppliers:read'],
+      ['/management/users', 'Funcionários', 'FN', 'users:read'],
     ],
   },
   {
     title: 'Financeiro',
     items: [
-      ['/management/payables', 'Contas a pagar', 'CP'],
-      ['/management/receivables', 'Contas a receber', 'CR'],
+      ['/management/payables', 'Contas a pagar', 'CP', 'bills:read'],
+      ['/management/receivables', 'Contas a receber', 'CR', 'bills:read'],
     ],
   },
   {
     title: 'Gestão',
     items: [
-      ['/management/reports', 'Relatórios', 'RL'],
-
-      ['/management/company', 'Minha empresa', 'EM'],
-      ['/management/audit', 'Auditoria', 'AU'],
-      ['/management/exports', 'Exportações', 'EX'],
-      ['/management/account', 'Minha conta', 'MC'],
+      ['/management/reports', 'Relatórios', 'RL', 'reports:read'],
+      ['/management/company', 'Minha empresa', 'EM', 'tenant:read'],
+      ['/management/audit', 'Auditoria', 'AU', 'audit:read'],
+      ['/management/exports', 'Importação e exportação', 'IE', 'reports:read'],
+      ['/management/account', 'Minha conta', 'MC', null],
     ],
   },
-];
+] as const;
+
+// Permissão de leitura por rota — o mapa nasce do menu e recebe as telas
+// fora da navegação (presets e categorias, acessadas por links internos).
+const routePermissions: Record<string, string> = {
+  ...Object.fromEntries(
+    navigation
+      .flatMap((group) => group.items as unknown as string[][])
+      .filter((item) => item[3])
+      .map((item) => [item[0], item[3]])
+  ),
+  '/management/presets': 'permissionPresets:read',
+  '/management/categories': 'categories:read',
+};
+
+// Master acessa tudo; demais usuários seguem as permissões efetivas.
+const allowed = (role: string | undefined, permissions: string[] | undefined, required: string | null) =>
+  !required || role === 'master' || hasPermission(permissions, required);
 
 const WorkspaceContext = createContext('');
 
@@ -125,10 +148,14 @@ export default function AdminShell({
     );
   const currentTitle =
     navigation
-      .flatMap((group) => group.items)
+      .flatMap((group) => group.items as unknown as string[][])
       .find((item) => item[0] === pathname)?.[1] || 'Painel administrativo';
   const workspace =
     user.role === 'master' ? selectedTenant : user.tenantId || '';
+  // Identidade da empresa no menu lateral: logo (quando enviada) ou a
+  // inicial do nome de exibição — o "S" fixo vira fallback da plataforma.
+  const companyLabel =
+    tenant?.displayName || tenant?.name || 'Stock-ly';
 
   return (
     <WorkspaceContext.Provider value={workspace}>
@@ -147,13 +174,26 @@ export default function AdminShell({
           <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-800 px-4">
             <Link
               href="/dashboard"
-              title="Stock-ly"
-              className="flex items-center gap-3 font-bold text-white"
+              title={companyLabel}
+              className="flex min-w-0 items-center gap-3 font-bold text-white"
             >
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-lg">
-                S
+              {tenant?.logoUrl ? (
+                <Image
+                  src={tenant.logoUrl}
+                  alt={companyLabel}
+                  width={40}
+                  height={40}
+                  unoptimized
+                  className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-1"
+                />
+              ) : (
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-600 text-lg">
+                  {companyLabel.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>
+                {companyLabel}
               </span>
-              <span className={collapsed ? 'lg:hidden' : ''}>Stock-ly</span>
             </Link>
             <button
               className="lg:hidden"
@@ -167,7 +207,17 @@ export default function AdminShell({
             aria-label="Navegação administrativa"
             className="sidebar-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-5"
           >
-            {navigation.map((group) => (
+            {navigation
+              .map((group) => ({
+                ...group,
+                // Menu por permissão: esconde o item que o usuário não pode
+                // ler e o grupo inteiro se ficar sem itens.
+                items: group.items.filter((item) =>
+                  allowed(user.role, user.permissions, item[3] as string | null)
+                ),
+              }))
+              .filter((group) => group.items.length > 0)
+              .map((group) => (
               <section key={group.title}>
                 <button
                   onClick={() =>
@@ -269,7 +319,28 @@ export default function AdminShell({
               </span>
             </div>
           )}
-          <div key={workspace}>{children}</div>
+          <div key={workspace}>
+            {/* Guarda de rota: quem burlar o menu pela URL vê o bloqueio —
+                e o backend continua rejeitando qualquer chamada sem
+                permissão. */}
+            {allowed(
+              user.role,
+              user.permissions,
+              routePermissions[pathname] || null
+            ) ? (
+              children
+            ) : (
+              <main className="mx-auto max-w-3xl p-4 sm:p-8">
+                <section className="admin-panel py-12 text-center">
+                  <h2 className="text-lg font-semibold">Acesso restrito</h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Você não tem permissão para visualizar esta área. Peça a
+                    liberação a um administrador.
+                  </p>
+                </section>
+              </main>
+            )}
+          </div>
         </div>
       </div>
     </WorkspaceContext.Provider>
