@@ -29,7 +29,7 @@ describe('exportService', () => {
         const result = await exportResourceService('products', {}, 'tenantA');
 
         expect(result.contentType).toBe('text/csv; charset=utf-8');
-        expect(result.filename).toMatch(/products_page_1\.csv$/);
+        expect(result.filename).toMatch(/^products_\d{4}-\d{2}-\d{2}\.csv$/);
         expect(result.total).toBe(1);
         expect(result.content).toContain('Produto A,P1,un,10,5,5,1,Categoria,true');
     });
@@ -93,16 +93,23 @@ describe('exportService', () => {
         const result = await exportResourceService('products', { format: 'json' }, 'tenantA');
 
         expect(result.contentType).toBe('application/json; charset=utf-8');
-        expect(result.filename).toMatch(/products_page_1\.json$/);
+        expect(result.filename).toMatch(/^products_\d{4}-\d{2}-\d{2}\.json$/);
         expect(JSON.parse(result.content)[0].name).toBe('Produto A');
     });
 
-    it('applies pagination parameters', async () => {
-        mockGetExportData.mockResolvedValue([]);
-        mockCountExportData.mockResolvedValue(0);
+    it('exports all pages in a single file', async () => {
+        // 2.500 registros → 3 blocos internos de 1.000 concatenados.
+        mockCountExportData.mockResolvedValue(2500);
+        mockGetExportData
+            .mockResolvedValueOnce([{ name: 'A' }])
+            .mockResolvedValueOnce([{ name: 'B' }])
+            .mockResolvedValueOnce([{ name: 'C' }]);
 
-        await exportResourceService('categories', { page: '2', limit: '50' }, 'tenantA');
+        const result = await exportResourceService('categories', { format: 'json' }, 'tenantA');
 
-        expect(mockGetExportData).toHaveBeenCalledWith('categories', 'tenantA', 50, 50, expect.any(Object));
+        expect(mockGetExportData).toHaveBeenNthCalledWith(1, 'categories', 'tenantA', 0, 1000, expect.any(Object));
+        expect(mockGetExportData).toHaveBeenNthCalledWith(2, 'categories', 'tenantA', 1000, 1000, expect.any(Object));
+        expect(mockGetExportData).toHaveBeenNthCalledWith(3, 'categories', 'tenantA', 2000, 1000, expect.any(Object));
+        expect(JSON.parse(result.content)).toHaveLength(3);
     });
 });

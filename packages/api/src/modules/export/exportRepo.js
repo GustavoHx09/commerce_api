@@ -3,6 +3,9 @@ import { getCategoriesRepo, countCategoriesRepo } from "../category/categoryRepo
 import { getCustomersRepo, countCustomersRepo } from "../customer/customerRepo.js";
 import { getSuppliersRepo, countSuppliersRepo } from "../supplier/supplierRepo.js";
 import { getOrdersRepo, countOrdersRepo } from "../order/orderRepo.js";
+import { getStockMovementsRepo, countStockMovementsRepo } from "../stock/stockMovementRepo.js";
+import { getBillsRepo, countBillsRepo } from "../bill/billRepo.js";
+import { getPaymentsRepo, countPaymentsRepo } from "../payment/paymentRepo.js";
 import { baseQuery } from "../../shared/utils/repositoryHelpers.js";
 
 // Recursos exportáveis e as funções de consulta e contagem correspondentes.
@@ -12,6 +15,9 @@ const RESOURCE_HANDLERS = {
     customers: { get: getCustomersRepo, count: countCustomersRepo },
     suppliers: { get: getSuppliersRepo, count: countSuppliersRepo },
     orders: { get: getOrdersRepo, count: countOrdersRepo },
+    stockmovements: { get: getStockMovementsRepo, count: countStockMovementsRepo },
+    bills: { get: getBillsRepo, count: countBillsRepo },
+    payments: { get: getPaymentsRepo, count: countPaymentsRepo },
 };
 
 // Retorna os dados de um recurso do tenant, paginado e em formato plano.

@@ -183,8 +183,9 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 | `/bills` | Contas a pagar e receber com liquidação total/parcial via caixa aberto |
 | `/dashboard` | Vendas do dia/semana/mês, estoque baixo, total em caixa e dados do tenant |
 | `/reports` | Relatórios de vendas, produtos mais vendidos, estoque, movimentações e fluxo de caixa |
-| `/export` | Exportação de categorias, produtos, clientes, fornecedores e pedidos em CSV/JSON |
-| `/audit` | Logs de auditoria |
+| `/export` | Exportação completa (arquivo único) de categorias, produtos, clientes, fornecedores, pedidos, movimentações de estoque, contas e pagamentos em CSV/JSON |
+| `/import` | Importação em massa por arquivo CSV/JSON (`products`, `categories`, `customers`, `suppliers`): cada registro criado é auditado, categorias inexistentes são criadas e o estoque inicial vira movimentação de entrada |
+| `/audit` | Logs de auditoria (o parâmetro `manualOnly=true` esconde os registros gerados pelo fluxo de venda, mantendo cancelamentos e cadastros) |
 
 ## Segurança
 
@@ -207,6 +208,7 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 - Modo de operação do caixa configurável por tenant em `/tenants/me` (`cashierMode`): `per_operator` (um caixa aberto por usuário, padrão) ou `shared` (um caixa único compartilhado por todos os operadores da empresa)
 - Pagamento combinado por venda (múltiplos métodos) com troco apenas em dinheiro e juros de crédito configuráveis por parcela em `/tenants/me` (`paymentFees`)
 - O saldo em estoque só é alterado por movimentações: suprimento (`in`) e retirada (`out`) exigem a permissão `stock:supply`, acerto de inventário (`adjust`) exige `stock:adjust` — todos com motivo obrigatório, em transação e com auditoria da movimentação e do produto
+- Baixas e devoluções de estoque por vendas também auditam o produto, e logs de produto com alteração de `quantityInStock` retornam `stockContext` (tipo, motivo e referência da movimentação — ex.: `Venda #12`)
 - O cadastro/edição de produto rejeita `quantityInStock`: não é possível burlar a rastreabilidade alterando o saldo direto na entidade
 - A listagem de produtos retorna somente ativos por padrão e aceita a visão combinada `view` (`active`, `inactive`, `lowStock`, `all`) além dos parâmetros `isActive`/`minStockAlert`
 - Hard delete bloqueado para produtos, clientes e caixas com histórico de vendas ou movimentações

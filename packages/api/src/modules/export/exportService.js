@@ -2,10 +2,11 @@ import { getExportData, countExportData } from "./exportRepo.js";
 import { getSort } from "../../shared/utils/paginationHelpers.js";
 import { throwValidationError } from "../../shared/utils/serviceHelpers.js";
 
-const VALID_RESOURCES = ["categories", "products", "customers", "suppliers", "orders"];
+const VALID_RESOURCES = ["categories", "products", "customers", "suppliers", "orders", "stockmovements", "bills", "payments"];
 const VALID_FORMATS = ["csv", "json"];
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
+// Bloco interno de leitura: a exportação percorre todas as páginas e
+// entrega o arquivo completo — o usuário não escolhe página.
+const EXPORT_PAGE_SIZE = 1000;
 
 // Valida e retorna o recurso solicitado.
 const getResource = (value) => {
@@ -22,14 +23,6 @@ const getFormat = (value) => {
         throwValidationError("Formato inválido. Valores aceitos: csv, json");
     }
     return format;
-};
-
-// Extrai e limita os parâmetros de paginação da exportação.
-const getExportPagination = (query) => {
-    const page = Math.max(1, parseInt(query.page, 10) || 1);
-    const limit = Math.max(1, Math.min(parseInt(query.limit, 10) || DEFAULT_LIMIT, MAX_LIMIT));
-    const skip = (page - 1) * limit;
-    return { page, limit, skip };
 };
 
 // Converte um valor para uma célula CSV segura.
@@ -198,6 +191,55 @@ const ORDERS_CSV_COLUMNS = [
     "itemTotal",
 ];
 
+// Normaliza movimentações de estoque (suprimento, retirada e acerto) com
+// o produto e o responsável resolvidos pelo populate do repo.
+const normalizeStockMovements = (rows) =>
+    rows.map((row) => ({
+        createdAt: row.createdAt,
+        product: row.productId?.name || "",
+        sku: row.productId?.sku || "",
+        type: row.type,
+        quantity: row.quantity,
+        previousQuantity: row.previousQuantity,
+        newQuantity: row.newQuantity,
+        reason: row.reason || "",
+        reference: row.reference || "",
+        createdBy: row.createdBy?.name || "",
+    }));
+
+const STOCKMOVEMENTS_COLUMNS = ["createdAt", "product", "sku", "type", "quantity", "previousQuantity", "newQuantity", "reason", "reference", "createdBy"];
+
+// Normaliza contas a pagar/receber para a planilha financeira.
+const normalizeBills = (rows) =>
+    rows.map((row) => ({
+        type: row.type,
+        description: row.description,
+        amount: row.amount,
+        dueDate: row.dueDate,
+        status: row.status,
+        paidAt: row.paidAt || "",
+        notes: row.notes || "",
+        createdAt: row.createdAt,
+    }));
+
+const BILLS_COLUMNS = ["type", "description", "amount", "dueDate", "status", "paidAt", "notes", "createdAt"];
+
+// Normaliza recebimentos de vendas com forma, valor e parcelas.
+const normalizePayments = (rows) =>
+    rows.map((row) => ({
+        orderId: row.orderId,
+        cashierId: row.cashierId || "",
+        createdAt: row.createdAt,
+        method: row.method,
+        amount: row.amount,
+        installments: row.installments || "",
+        interestAmount: row.interestAmount || "",
+        status: row.status,
+        reference: row.reference || "",
+    }));
+
+const PAYMENTS_COLUMNS = ["orderId", "cashierId", "createdAt", "method", "amount", "installments", "interestAmount", "status", "reference"];
+
 // Mapeia o recurso para seus normalizadores e colunas de CSV.
 const RESOURCE_NORMALIZERS = {
     categories: { normalize: normalizeCategories, columns: CATEGORIES_COLUMNS },
@@ -205,6 +247,9 @@ const RESOURCE_NORMALIZERS = {
     customers: { normalize: normalizeCustomers, columns: CUSTOMER_COLUMNS },
     suppliers: { normalize: normalizeSuppliers, columns: SUPPLIER_COLUMNS },
     orders: { normalize: normalizeOrdersCSV, columns: ORDERS_CSV_COLUMNS },
+    stockmovements: { normalize: normalizeStockMovements, columns: STOCKMOVEMENTS_COLUMNS },
+    bills: { normalize: normalizeBills, columns: BILLS_COLUMNS },
+    payments: { normalize: normalizePayments, columns: PAYMENTS_COLUMNS },
 };
 
 // Prepara os dados de acordo com o recurso e formato.
@@ -222,16 +267,20 @@ const prepareData = (resource, rows, format) => {
 export const exportResourceService = async (resource, query, tenantId) => {
     const resolvedResource = getResource(resource);
     const format = getFormat(query.format);
-    const { page, limit, skip } = getExportPagination(query);
     const sort = getSort(query, "createdAt");
 
-    const [rows, total] = await Promise.all([
-        getExportData(resolvedResource, tenantId, skip, limit, sort),
-        countExportData(resolvedResource, tenantId),
-    ]);
+    // O arquivo sempre sai completo: busca todas as páginas em blocos de
+    // 1.000 em paralelo e concatena — o usuário não escolhe página.
+    const total = await countExportData(resolvedResource, tenantId);
+    const chunks = await Promise.all(
+        Array.from({ length: Math.ceil(total / EXPORT_PAGE_SIZE) }, (_, index) =>
+            getExportData(resolvedResource, tenantId, index * EXPORT_PAGE_SIZE, EXPORT_PAGE_SIZE, sort)
+        )
+    );
+    const rows = chunks.flat();
 
     const prepared = prepareData(resolvedResource, rows, format);
-    const filename = `${resolvedResource}_page_${page}.${format}`;
+    const filename = `${resolvedResource}_${new Date().toISOString().slice(0, 10)}.${format}`;
     const content = format === "csv" ? toCSV(prepared, RESOURCE_NORMALIZERS[resolvedResource].columns) : toJSON(prepared);
 
     return {

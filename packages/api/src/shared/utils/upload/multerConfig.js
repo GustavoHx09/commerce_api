@@ -40,6 +40,22 @@ export const uploadLogo = multer({
     fileFilter,
 }).single("logo");
 
+// Upload de arquivo de importação em massa: aceita apenas .csv e .json de
+// até 5 MB (o mimetype do CSV varia por SO/navegador, então a extensão do
+// nome é o critério confiável).
+export const uploadImport = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const name = String(file.originalname || "").toLowerCase();
+        if (name.endsWith(".csv") || name.endsWith(".json")) {
+            cb(null, true);
+        } else {
+            cb(new Error("Arquivo inválido. Envie um arquivo .csv ou .json."), false);
+        }
+    },
+}).single("file");
+
 // Gera o caminho de destino de uma logo no disco.
 export const buildLocalLogoPath = (tenantId, extension) => {
     const dir = ensureDir(`./uploads/tenants/${tenantId}`);
