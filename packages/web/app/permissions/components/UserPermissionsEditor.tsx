@@ -6,6 +6,8 @@ import PermissionChecklist from './PermissionChecklist';
 import {
   DEFAULT_ROLE_PERMISSIONS,
   computeEffectivePermissions,
+  permissionDependents,
+  permissionWithDependencies,
 } from '@/lib/permissions';
 import type { PanelUser, PermissionPreset } from '../types';
 
@@ -72,21 +74,30 @@ export default function UserPermissionsEditor({
 
   // Marcando fora da base vira extra; desmarcando algo da base vira revogação.
   const handleToggle = (permission: string, next: boolean) => {
-    const inBase = base.includes(permission);
+    // Marcando: ativa junto as dependências — as do preset saem de
+    // "revogadas" e as de fora entram como extras. Desmarcando: remove em
+    // cascata quem depende dela (revogadas se da base, extras se de fora).
+    const targets = next
+      ? permissionWithDependencies(permission)
+      : [permission, ...permissionDependents(permission)];
 
     setExtras((prev) => {
       const nextSet = new Set(prev);
-      if (!inBase) {
-        next ? nextSet.add(permission) : nextSet.delete(permission);
-      }
+      targets.forEach((perm) => {
+        if (!base.includes(perm)) {
+          next ? nextSet.add(perm) : nextSet.delete(perm);
+        }
+      });
       return nextSet;
     });
 
     setRevoked((prev) => {
       const nextSet = new Set(prev);
-      if (inBase) {
-        next ? nextSet.delete(permission) : nextSet.add(permission);
-      }
+      targets.forEach((perm) => {
+        if (base.includes(perm)) {
+          next ? nextSet.delete(perm) : nextSet.add(perm);
+        }
+      });
       return nextSet;
     });
   };

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './context/AuthContext';
+import { hasPermission } from '@/lib/permissions';
 
 export default function Home() {
   const { user, isLoading } = useAuth();
@@ -10,7 +11,18 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading) {
-      router.push(user ? '/dashboard' : '/login');
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      // Sem dashboard:read o usuário cai na primeira área que pode usar —
+      // quem só opera vendas vai direto para o PDV.
+      const target = hasPermission(user.permissions, 'dashboard:read')
+        ? '/dashboard'
+        : hasPermission(user.permissions, 'orders:write')
+          ? '/management/pos'
+          : '/management/account';
+      router.push(target);
     }
   }, [isLoading, user, router]);
 

@@ -3,6 +3,10 @@
 import { useMemo, useState } from 'react';
 import { useWorkspaceApi } from '../../AdminShell';
 import PermissionChecklist from './PermissionChecklist';
+import {
+  permissionDependents,
+  permissionWithDependencies,
+} from '@/lib/permissions';
 import type { PermissionPreset } from '../types';
 
 interface PresetFormProps {
@@ -35,7 +39,15 @@ export default function PresetForm({
   const handleToggle = (permission: string, next: boolean) => {
     setSelected((prev) => {
       const nextSet = new Set(prev);
-      next ? nextSet.add(permission) : nextSet.delete(permission);
+      // Marcar ativa junto as dependências; desmarcar remove em cascata
+      // quem depende dela (permissionDependents).
+      if (next) {
+        permissionWithDependencies(permission).forEach((p) => nextSet.add(p));
+      } else {
+        [permission, ...permissionDependents(permission)].forEach((p) =>
+          nextSet.delete(p)
+        );
+      }
       return nextSet;
     });
   };
