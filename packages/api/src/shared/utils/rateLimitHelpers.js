@@ -2,8 +2,10 @@
 // Em ambiente com uma única instância (piloto) isso é suficiente; para escalar horizontalmente,
 // essa implementação deve ser substituída por uma store compartilhada (ex.: Redis).
 const WINDOW_MS = 15 * 60 * 1000;
-const USER_LIMIT = 1000;
-const TENANT_LIMIT = 10000;
+// Limites por usuário/tenant configuráveis via env — facilita ajustar em
+// produção e elevar durante testes de carga sem alterar código.
+const USER_LIMIT = Number(process.env.USER_RATE_LIMIT_MAX) || 1000;
+const TENANT_LIMIT = Number(process.env.TENANT_RATE_LIMIT_MAX) || 10000;
 
 const memoryStore = new Map();
 
