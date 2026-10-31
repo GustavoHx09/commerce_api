@@ -43,7 +43,7 @@ export const navigation = [
     title: 'Gestão',
     items: [
       ['/management/reports', 'Relatórios', 'RL', 'reports:read'],
-      ['/management/company', 'Minha empresa', 'EM', 'tenant:read'],
+      ['/management/company', 'Minha empresa', 'EM', 'tenant:view'],
       ['/management/audit', 'Auditoria', 'AU', 'audit:read'],
       ['/management/exports', 'Importação e exportação', 'IE', 'reports:read'],
       ['/management/account', 'Minha conta', 'MC', null],

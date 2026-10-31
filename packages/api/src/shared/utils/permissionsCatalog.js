@@ -3,6 +3,9 @@
 export const SYSTEM_PERMISSIONS = [
     "dashboard:read",
     "tenant:read",
+    // "Minha empresa" (tela) — separada do :read, que virou permissão de
+    // base concedida a todo usuário autenticado.
+    "tenant:view",
     "tenant:write",
     "users:read",
     "users:write",

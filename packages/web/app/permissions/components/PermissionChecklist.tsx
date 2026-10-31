@@ -1,6 +1,10 @@
 'use client';
 
-import { ACTION_LABELS, groupPermissionsByResource } from '@/lib/permissions';
+import {
+  ACTION_LABELS,
+  BASELINE_PERMISSIONS,
+  groupPermissionsByResource,
+} from '@/lib/permissions';
 
 interface PermissionChecklistProps {
   // Catálogo completo de permissões válidas retornado pela API.
@@ -36,7 +40,11 @@ export default function PermissionChecklist({
             {group.label}
           </legend>
           <div className="space-y-2">
-            {group.permissions.map((permission) => {
+            {/* Permissões de base (ex.: tenant:read) são fixas para todos —
+                ficam fora da grade. */}
+            {group.permissions
+              .filter((permission) => !BASELINE_PERMISSIONS.includes(permission))
+              .map((permission) => {
               const action = permission.split(':')[1];
               const origin = getOrigin?.(permission) ?? null;
               const isChecked = checked.has(permission);

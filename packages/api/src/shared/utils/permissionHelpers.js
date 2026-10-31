@@ -1,11 +1,16 @@
 import permissionPresets from "../../modules/permissionPreset/permissionPresetModel.js";
 
 // Permissões padrão para cada role quando o usuário não tem preset nem permissões customizadas.
+// Permissões de base: concedidas a TODO usuário autenticado, sem depender
+// de cargo, preset ou revogações — o app precisa delas para funcionar
+// (tenant:read alimenta nome/logo no menu e o modo de caixa no PDV).
+const BASELINE_PERMISSIONS = ["tenant:read"];
+
 const defaultRolePermissions = {
     master: ["*"], // master pode tudo
     admin: [
         "dashboard:read",
-        "tenant:read", "tenant:write",
+        "tenant:read", "tenant:view", "tenant:write",
         "users:read", "users:write", "users:delete",
         "permissionPresets:read", "permissionPresets:write", "permissionPresets:delete",
         "products:read", "products:write", "products:delete",
@@ -24,6 +29,9 @@ const defaultRolePermissions = {
         "dashboard:read",
         "tenant:read",
         "products:read", "products:write",
+        // Leitura de categorias é necessária para filtrar produtos no PDV —
+        // sem ela a listagem /categories responde 403 durante a venda.
+        "categories:read",
         "customers:read", "customers:write",
         "orders:read", "orders:write",
         "cashier:read", "cashier:write",
@@ -73,6 +81,8 @@ export const getPermissions = (user) => {
     const effective = new Set(base);
     extras.forEach((p) => effective.add(p));
     revoked.forEach((p) => effective.delete(p));
+    // A base vem por último: nem preset nem revogação consegue removê-la.
+    BASELINE_PERMISSIONS.forEach((p) => effective.add(p));
 
     return Array.from(effective);
 };
@@ -82,6 +92,9 @@ export const hasPermission = (user, resource, action) => {
     const permissions = getPermissions(user);
     const revoked = user?.revokedPermissions || [];
     const target = `${resource}:${action}`;
+
+    // Permissões de base são fixas para qualquer usuário autenticado.
+    if (BASELINE_PERMISSIONS.includes(target)) return true;
 
     // Revogações exatas ou curingas bloqueiam antes de qualquer outra regra.
     if (revoked.includes(target) || revoked.includes(`${resource}:*`) || revoked.includes("*")) {
