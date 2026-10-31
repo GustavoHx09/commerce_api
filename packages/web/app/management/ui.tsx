@@ -203,6 +203,47 @@ export function Modal({
   );
 }
 
+// Validação de um campo individual — mesma regra aplicada pelo backend
+// (regra 2 do AGENTS.md): formato de email, documento, telefone, CEP, cor,
+// número e vencimento não passado. Compartilhada entre RecordForm e
+// EditableDetails para os dois lados validarem igual.
+export const validateFieldValue = (
+  field: Field,
+  raw: string,
+  values: Record<string, string>
+): string | null => {
+  if (field.required && !raw) return `Preencha ${field.label}.`;
+  if (!raw) return null;
+  if (field.type === 'password' && raw.length < 6)
+    return 'A senha deve ter no mínimo 6 caracteres.';
+  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))
+    return 'Email inválido.';
+  if (
+    field.type === 'number' &&
+    (!Number.isFinite(Number(raw)) || Number(raw) < (field.min ?? -Infinity))
+  )
+    return `Valor inválido para ${field.label}.`;
+  if (field.key === 'phone' && !/^\d{10,11}$/.test(raw.replace(/\D/g, '')))
+    return 'Telefone deve conter 10 ou 11 dígitos.';
+  if (field.key.endsWith('zipCode') && !/^\d{5}-?\d{3}$/.test(raw))
+    return 'CEP inválido.';
+  if (
+    ['cpf', 'document'].includes(field.key) &&
+    !validDocument(raw, field.key === 'cpf' ? 'cpf' : values.documentType)
+  )
+    return 'CPF/CNPJ inválido.';
+  if (field.key.startsWith('colors.') && !/^#[0-9a-f]{6}$/i.test(raw))
+    return 'Cor inválida. Utilize # seguido de seis dígitos hexadecimais.';
+  // Vencimento não pode ser no passado — compara só a data, como o backend.
+  if (
+    field.key === 'dueDate' &&
+    field.type === 'date' &&
+    raw < new Date().toISOString().slice(0, 10)
+  )
+    return 'Vencimento não pode ser no passado.';
+  return null;
+};
+
 function validDocument(value: string, type: string) {
   const digits = value.replace(/\D/g, '');
   if (
@@ -310,38 +351,8 @@ export function RecordForm({
     try {
       for (const field of submittable) {
         const raw = (values[field.key] || '').trim();
-        if (field.required && !raw) throw new Error(`Preencha ${field.label}.`);
-        if (raw && field.type === 'password' && raw.length < 6)
-          throw new Error('A senha deve ter no mínimo 6 caracteres.');
-        if (
-          raw &&
-          field.type === 'number' &&
-          (!Number.isFinite(Number(raw)) ||
-            Number(raw) < (field.min ?? -Infinity))
-        )
-          throw new Error(`Valor inválido para ${field.label}.`);
-        if (
-          raw &&
-          field.key === 'phone' &&
-          !/^\d{10,11}$/.test(raw.replace(/\D/g, ''))
-        )
-          throw new Error('Telefone deve conter 10 ou 11 dígitos.');
-        if (raw && field.key.endsWith('zipCode') && !/^\d{5}-?\d{3}$/.test(raw))
-          throw new Error('CEP inválido.');
-        if (
-          raw &&
-          ['cpf', 'document'].includes(field.key) &&
-          !validDocument(raw, field.key === 'cpf' ? 'cpf' : values.documentType)
-        )
-          throw new Error('CPF/CNPJ inválido.');
-        if (
-          raw &&
-          field.key.startsWith('colors.') &&
-          !/^#[0-9a-f]{6}$/i.test(raw)
-        )
-          throw new Error(
-            'Cor inválida. Utilize # seguido de seis dígitos hexadecimais.'
-          );
+        const invalid = validateFieldValue(field, raw, values);
+        if (invalid) throw new Error(invalid);
         if (!raw && !editing && !field.required) continue;
         const value: unknown =
           field.key === 'isActive'

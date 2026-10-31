@@ -36,6 +36,7 @@ import {
   Notice,
   PageHeading,
   RecordForm,
+  validateFieldValue,
 } from './ui';
 
 const detailLabels: Record<string, string> = {
@@ -886,16 +887,11 @@ function EditableDetails({
     for (const field of editableFields) {
       if (field.readOnly) continue;
       const raw = (values[field.key] || '').trim();
-      if (field.required && !raw) {
-        setError(`Preencha ${field.label}.`);
-        return;
-      }
-      if (
-        raw &&
-        field.type === 'number' &&
-        (!Number.isFinite(Number(raw)) || Number(raw) < (field.min ?? -Infinity))
-      ) {
-        setError(`Valor inválido para ${field.label}.`);
+      // Mesma validação do RecordForm (regra 2): formato de email,
+      // documento, telefone, CEP, cor e vencimento — além de required/min.
+      const invalid = validateFieldValue(field, raw, values);
+      if (invalid) {
+        setError(invalid);
         return;
       }
       // Numérico vazio não é enviado; strings vazias seguem como "" para

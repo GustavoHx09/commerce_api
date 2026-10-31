@@ -250,7 +250,7 @@ Escopo mínimo aprovado para os primeiros pilotos, **sem Redis e sem ferramentas
 
 - [x] Testes unitários e de integração dos fluxos críticos (auth, tenant, autorização, venda/caixa/estoque/pagamento).
 - [x] Testes automatizados de autorização e isolamento entre tenants.
-- [ ] Validações equivalentes no frontend e no backend (frontend será feito na fase de UI).
+- [x] Validações equivalentes no frontend e no backend (validador de campo compartilhado cobre formulários e edição em detalhes).
 - [x] Proteções contra NoSQL injection, XSS, CSRF, brute force e uploads maliciosos (revisão básica aplicada).
 - [x] HTTPS, cookies seguros, CORS restrito e headers de segurança.
 - [x] Rate limiting por IP, usuário e tenant (em memória; substituir por store compartilhada ao escalar).
