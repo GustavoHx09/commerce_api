@@ -185,6 +185,7 @@ Abaixo os prefixos das rotas disponíveis em `/api/v1`. Todos exigem autenticaç
 | `/reports` | Relatórios de vendas, produtos mais vendidos, estoque, movimentações e fluxo de caixa |
 | `/export` | Exportação completa (arquivo único) de categorias, produtos, clientes, fornecedores, pedidos, movimentações de estoque, contas e pagamentos em CSV/JSON |
 | `/import` | Importação em massa por arquivo CSV/JSON (`products`, `categories`, `customers`, `suppliers`): cada registro criado é auditado, categorias inexistentes são criadas e o estoque inicial vira movimentação de entrada |
+| `/platform` | Métricas consolidadas da plataforma (empresas, usuários, produtos, vendas e faturamento por tenant) — exclusiva do `master` |
 | `/audit` | Logs de auditoria (o parâmetro `manualOnly=true` esconde os registros gerados pelo fluxo de venda, mantendo cancelamentos e cadastros) |
 
 ## Segurança

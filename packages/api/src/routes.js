@@ -19,6 +19,7 @@ import paymentRoutes from './modules/payment/paymentRoutes.js';
 import reportRoutes from './modules/report/reportRoutes.js';
 import exportRoutes from './modules/export/exportRoutes.js';
 import importRoutes from './modules/import/importRoutes.js';
+import platformRoutes from './modules/platform/platformRoutes.js';
 
 // Roteador principal que agrupa todas as rotas da API.
 const router = Router();
@@ -42,5 +43,6 @@ router.use('/payments', authMiddleware, paymentRoutes);
 router.use('/reports', authMiddleware, tenantMiddleware, reportRoutes);
 router.use('/export', authMiddleware, tenantMiddleware, exportRoutes);
 router.use('/import', authMiddleware, tenantMiddleware, importRoutes);
+router.use('/platform', platformRoutes);
 
 export default router;

@@ -376,7 +376,7 @@ Objetivo: ampliar o mercado somente após estabilizar o produto principal.
 - [x] Cadastro/edição de produto não aceita alteração direta de `quantityInStock` — estoque só muda via movimentações.
 - [ ] Validar visualmente os fluxos autenticados e operações ponta a ponta com dados de uma empresa de teste.
 - [x] Refinar visibilidade de menus e ações pelas permissões efetivas de cada funcionário (sessão passa a retornar permissões efetivas).
-- [ ] Implementar o painel exclusivo MASTER com métricas da plataforma.
+- [x] Implementar o painel exclusivo MASTER com métricas da plataforma (`/platform/metrics` + tela Plataforma).
 - [ ] Definir autoatendimento de perfil e demais lacunas de API antes de expandir esses fluxos.
 
 ### Próximos passos
