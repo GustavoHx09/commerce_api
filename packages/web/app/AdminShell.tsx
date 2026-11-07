@@ -11,6 +11,17 @@ import { hasPermission } from '@/lib/permissions';
 // Quarto item de cada entrada: permissão de leitura exigida para o item
 // aparecer no menu — null significa visível para qualquer usuário logado.
 export const navigation = [
+  // Funções da plataforma (nossas, não dos clientes): ficam separadas dos
+  // menus operacionais e só aparecem para o master — platform:read não
+  // existe no catálogo de permissões concedíveis.
+  {
+    title: 'Gestão da plataforma',
+    items: [
+      ['/management/platform', 'Plataforma', 'PL', 'platform:read'],
+      ['/management/tenants', 'Empresas', 'EM', 'platform:read'],
+      ['/management/support', 'Suporte', 'SP', 'platform:read'],
+    ],
+  },
   {
     title: 'Visão geral',
     items: [['/dashboard', 'Dashboard', 'DG', 'dashboard:read']],
@@ -106,6 +117,13 @@ export default function AdminShell({
     '/forgot-password',
     '/reset-password',
   ].includes(pathname);
+  // Telas da plataforma são do master e não dependem de empresa selecionada
+  // — o seletor de área de trabalho some nelas.
+  const platformPage = [
+    '/management/platform',
+    '/management/tenants',
+    '/management/support',
+  ].includes(pathname);
 
   useEffect(() => {
     if (!publicPage && !isLoading && !user) router.replace('/login');
@@ -122,7 +140,11 @@ export default function AdminShell({
         do {
           const response = await axios.get(
             `${process.env.NEXT_PUBLIC_API_URL}/tenants`,
-            { withCredentials: true, params: { page, limit: 100 } }
+            {
+              withCredentials: true,
+              // workspace=true: só demo + empresas com modo suporte ativo.
+              params: { page, limit: 100, workspace: true },
+            }
           );
           all.push(...response.data.data.data);
           totalPages = response.data.data.pagination.totalPages;
@@ -297,7 +319,7 @@ export default function AdminShell({
               </button>
             </div>
           </header>
-          {user.role === 'master' && (
+          {user.role === 'master' && !platformPage && (
             <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm sm:px-8">
               <label htmlFor="workspace">Visualizar empresa:</label>
               <select

@@ -32,6 +32,9 @@ export type Screen = {
   params?: Record<string, string>;
   actions?: [string, string][];
   detailKey?: string;
+  // Telas da plataforma não dependem de empresa selecionada — o CRUD é
+  // cross-tenant e exclusivo do master.
+  noWorkspace?: boolean;
 };
 
 export const addressFields: Field[] = [
@@ -217,6 +220,48 @@ export const screens: Record<string, Screen> = {
     detailKey: 'customer',
     columns: customerColumns,
     fields: contactFields,
+    filters: [activeViewFilter],
+  },
+  tenants: {
+    title: 'Empresas',
+    description:
+      'Gerencie as empresas cadastradas na plataforma — exclusivo do master.',
+    endpoint: '/tenants',
+    search: true,
+    detailKey: 'tenant',
+    noWorkspace: true,
+    columns: [
+      ['name', 'Empresa'],
+      ['displayName', 'Nome de exibição'],
+      ['document', 'Documento'],
+      ['plan', 'Plano'],
+      ['createdAt@date', 'Criada em'],
+    ],
+    fields: [
+      { key: 'name', label: 'Nome', required: true },
+      { key: 'displayName', label: 'Nome de exibição' },
+      {
+        key: 'documentType',
+        label: 'Tipo de documento',
+        required: true,
+        options: [
+          ['cpf', 'CPF'],
+          ['cnpj', 'CNPJ'],
+        ],
+      },
+      { key: 'document', label: 'Documento', required: true },
+      { key: 'phone', label: 'Telefone' },
+      { key: 'email', label: 'Email', type: 'email' },
+      {
+        key: 'plan',
+        label: 'Plano',
+        options: [
+          ['free', 'Free'],
+          ['basic', 'Basic'],
+          ['pro', 'Pro'],
+        ],
+      },
+    ],
     filters: [activeViewFilter],
   },
   suppliers: {

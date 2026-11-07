@@ -5,6 +5,8 @@ import PosScreen from '../PosScreen';
 import ReportScreen from '../ReportScreen';
 import { AccountScreen, CompanyScreen, ExportScreen } from '../SettingsScreen';
 import PresetsScreen from '../PresetsScreen';
+import PlatformScreen from '../PlatformScreen';
+import SupportScreen from '../SupportScreen';
 
 export default async function ManagementPage({
   params,
@@ -18,6 +20,8 @@ export default async function ManagementPage({
   if (screen === 'account') return <AccountScreen />;
   if (screen === 'exports') return <ExportScreen />;
   if (screen === 'presets') return <PresetsScreen />;
+  if (screen === 'platform') return <PlatformScreen />;
+  if (screen === 'support') return <SupportScreen />;
   if (!screens[screen]) notFound();
   return <ResourceScreen key={screen} screen={screens[screen]} />;
 }

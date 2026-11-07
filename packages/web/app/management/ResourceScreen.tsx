@@ -1244,6 +1244,9 @@ export function RecordDetails({ row }: { row: Row }) {
 
 export default function ResourceScreen({ screen }: { screen: Screen }) {
   const { client, tenantId } = useWorkspaceApi();
+  // Telas da plataforma (ex.: CRUD de empresas) funcionam sem tenant — os
+  // gates de "selecione uma empresa" não se aplicam a elas.
+  const needsWorkspace = !tenantId && !screen.noWorkspace;
   const { user, refreshSession } = useAuth();
   const searchParams = useSearchParams();
   const [rows, setRows] = useState<Row[]>([]);
@@ -1310,7 +1313,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
   const [lastClosing, setLastClosing] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    if (!tenantId) {
+    if (needsWorkspace) {
       setLoading(false);
       return;
     }
@@ -1386,7 +1389,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
     } finally {
       setLoading(false);
     }
-  }, [client, tenantId, screen, applied, page, searched, isCashiers, user?.id]);
+  }, [client, tenantId, needsWorkspace, screen, applied, page, searched, isCashiers, user?.id]);
   useEffect(() => {
     startTransition(() => {
       void load();
@@ -1622,7 +1625,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               hasPermission(user?.permissions, 'stock:adjust')) && (
               <button
                 className="admin-secondary"
-                disabled={!tenantId}
+                disabled={needsWorkspace}
                 onClick={() =>
                   setAction({
                     row: {},
@@ -1656,7 +1659,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
               (e só aparece quando não há caixa aberto). */}
           {screen.fields && !isCashiers && can(permRes ? `${permRes}:write` : null) && (
             <button
-              disabled={!tenantId}
+              disabled={needsWorkspace}
               className="admin-primary"
               onClick={() => void openNewRecord()}
             >
@@ -1667,7 +1670,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
       </PageHeading>
       <div className="space-y-4">
         <Notice error={error} message={message} />
-        {!tenantId ? (
+        {needsWorkspace ? (
           <Notice message="Selecione uma empresa no cabeçalho para visualizar a área administrativa do cliente." />
         ) : (
           <>
@@ -1841,7 +1844,7 @@ export default function ResourceScreen({ screen }: { screen: Screen }) {
                     {!openCashier && can('cashier:write') && (
                       <button
                         className="admin-primary"
-                        disabled={!tenantId}
+                        disabled={needsWorkspace}
                         onClick={() => void openNewRecord()}
                       >
                         Abrir caixa
