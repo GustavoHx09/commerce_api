@@ -20,7 +20,7 @@ const addressFields = ["number", "street", "neighborhood", "zipCode", "complemen
 const planLimits = { free: 2, basic: 10, pro: 100 };
 
 // Campos que a própria empresa pode alterar através de /tenants/me.
-const ownTenantEditableFields = ["name", "displayName", "phone", "email", "address", "logoUrl", "colors", "paymentFees", "cashierMode"];
+const ownTenantEditableFields = ["name", "displayName", "phone", "email", "address", "logoUrl", "colors", "paymentFees", "cashierMode", "supportAccess"];
 
 // Modos válidos de operação do caixa configuráveis por tenant.
 const validCashierModes = ["per_operator", "shared"];
@@ -131,6 +131,12 @@ export const getTenantsService = async (query = {}) => {
     const sort = getSort(query, "name");
 
     const filter = { deletedAt: null };
+
+    // Seletor de área de trabalho do master: só empresas que liberaram
+    // acesso à plataforma com o modo suporte ativo.
+    if (query.workspace === "true") {
+        filter.supportAccess = true;
+    }
 
     if (query.isActive !== undefined) {
         filter.isActive = query.isActive === "true";

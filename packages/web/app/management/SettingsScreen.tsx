@@ -131,6 +131,19 @@ export function CompanyScreen() {
               setMessage('Modo de operação do caixa salvo.');
             }}
           />
+          <SupportAccessSection
+            key={String(Boolean(company.supportAccess))}
+            active={Boolean(company.supportAccess)}
+            canEdit={canEdit}
+            onSaved={(supportAccess) => {
+              setCompany({ ...company, supportAccess });
+              setMessage(
+                supportAccess
+                  ? 'Acesso de suporte liberado para a plataforma.'
+                  : 'Acesso de suporte revogado.'
+              );
+            }}
+          />
           <section className="admin-panel">
             <h2 className="text-lg font-semibold">Logo da empresa</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -749,6 +762,74 @@ interface ImportResult {
   total: number;
   created: number;
   errors: { line: number; message: string }[];
+}
+
+// Liberação de acesso da plataforma para suporte: o toggle chama a API na
+// hora — o admin pode revogar a qualquer momento. A alternância fica
+// auditada automaticamente pelo PUT /tenants/me.
+function SupportAccessSection({
+  active,
+  canEdit,
+  onSaved,
+}: {
+  active: boolean;
+  canEdit: boolean;
+  onSaved: (value: boolean) => void;
+}) {
+  const { client } = useWorkspaceApi();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const toggle = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const response = await client.put('/tenants/me', {
+        supportAccess: !active,
+      });
+      onSaved(Boolean(response.data.data.tenant.supportAccess));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="admin-panel">
+      <h2 className="text-lg font-semibold">Acesso de suporte</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Autoriza a equipe da plataforma a visualizar a área da empresa para
+        prestar suporte. Você pode revogar a qualquer momento.
+      </p>
+      {error && <Notice error={error} />}
+      {/* Toggle switch: cinza/deslizado à esquerda quando inativo, azul à
+          direita quando ativo — mesmo estilo de interruptor de sistema. */}
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={active}
+          aria-label="Modo suporte"
+          disabled={!canEdit || busy}
+          onClick={() => void toggle()}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            active ? 'bg-blue-600' : 'bg-slate-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              active ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+        <span className="text-sm font-medium text-slate-700">
+          Modo suporte{' '}
+          {active ? 'ativo — plataforma com acesso liberado' : 'desativado'}
+        </span>
+      </div>
+    </section>
+  );
 }
 
 export function ExportScreen() {

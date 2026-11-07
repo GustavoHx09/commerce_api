@@ -127,6 +127,19 @@ export const tenantMiddleware = async (req, res, next) => {
         req.tenantId = req.query.tenantId || null;
         // Resolve o nome da empresa para exibição nos logs de requisição.
         req.tenantName = req.tenantId ? await resolveTenantName(req.tenantId) : null;
+        // O master só opera dentro de tenants que liberaram acesso com o
+        // modo suporte — sem exceções, nem para a loja de demonstração.
+        // A liberação é checada a cada requisição para valer na hora.
+        if (req.tenantId) {
+            const tenant = await tenants.findById(req.tenantId)
+                .select("supportAccess")
+                .lean();
+            if (!tenant?.supportAccess) {
+                return res.status(403).json({
+                    message: "Esta empresa não liberou acesso à plataforma",
+                });
+            }
+        }
     } else {
         req.tenantId = req.user.tenantId;
         req.tenantName = req.user.tenantName || null;

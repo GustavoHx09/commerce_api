@@ -40,6 +40,9 @@ async function seed() {
     const tenant = await tenants.create({
       name: "Loja Exemplo",
       slug: "loja-exemplo",
+      // Tenant de demonstração: o único sempre acessível ao master, mesmo
+      // sem modo suporte — sandbox da plataforma.
+      isDemo: true,
       document: "04079412772007",
       documentType: "cnpj",
       phone: "1133334444",

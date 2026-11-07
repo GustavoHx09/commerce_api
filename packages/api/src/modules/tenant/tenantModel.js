@@ -147,6 +147,20 @@ const tenantsSchema = new mongoose.Schema({
         default: true,
     },
 
+    // Loja de demonstração da plataforma — único tenant sempre acessível
+    // ao master, usado como sandbox de testes e homologação.
+    isDemo: {
+        type: Boolean,
+        default: false,
+    },
+
+    // Modo suporte: liberado pelo admin da empresa em "Minha empresa",
+    // autoriza o master a acessar a área dela temporariamente.
+    supportAccess: {
+        type: Boolean,
+        default: false,
+    },
+
     // Data de exclusão lógica (soft delete).
     deletedAt: {
         type: Date,
